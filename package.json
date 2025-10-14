@@ -1,0 +1,24 @@
+{
+  "name": "gellyroller",
+  "version": "1.0.0",
+  "description": "Plotter control UI and scripts",
+  "homepage": "https://github.com/dirtybirdnj/gellyroller#readme",
+  "bugs": {
+    "url": "https://github.com/dirtybirdnj/gellyroller/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dirtybirdnj/gellyroller.git"
+  },
+  "license": "GPL-3.0-only",
+  "author": "Mat Gilbert",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "parser-readline": "^1.0.1",
+    "serialport": "^13.0.0"
+  }
+}

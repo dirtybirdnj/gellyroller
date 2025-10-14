@@ -26,3 +26,12 @@ buttons
       break;
     }
   })
+
+  console.log('buttons')
+
+  buttons
+  .init()
+  .catch(error => {
+    console.log('ERROR', error.stack);
+    process.exit(1);
+  });
