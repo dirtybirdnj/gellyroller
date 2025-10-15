@@ -1,24 +1,32 @@
 {
   "name": "gellyroller",
   "version": "1.0.0",
-  "description": "Plotter control UI and scripts",
-  "homepage": "https://github.com/dirtybirdnj/gellyroller#readme",
-  "bugs": {
-    "url": "https://github.com/dirtybirdnj/gellyroller/issues"
+  "description": "Express API and UI for controlling the Gellyroller pen-plotter machine with Duet mainboard",
+  "main": "express.js",
+  "type": "module",
+  "scripts": {
+    "start": "node express.js",
+    "dev": "node express.js",
+    "test": "node tests.js",
+    "pm2:start": "pm2 start express.js --name gellyroller",
+    "pm2:restart": "pm2 restart gellyroller",
+    "pm2:stop": "pm2 stop gellyroller",
+    "pm2:logs": "pm2 logs gellyroller",
+    "pm2:delete": "pm2 delete gellyroller",
+    "pm2:save": "pm2 save",
+    "pm2:startup": "pm2 startup"
   },
+  "keywords": ["gellyroller", "pen-plotter", "duet", "cnc", "api", "express", "raspberry-pi"],
+  "author": "",
+  "license": "ISC",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dirtybirdnj/gellyroller.git"
-  },
-  "license": "GPL-3.0-only",
-  "author": "Mat Gilbert",
-  "type": "commonjs",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "url": "https://github.com/dirtybirdnj/gellyroller.git"
   },
   "dependencies": {
-    "parser-readline": "^1.0.1",
-    "serialport": "^13.0.0"
+    "dotenv": "^16.0.0",
+    "express": "^4.18.0",
+    "serialport": "^12.0.0",
+    "@serialport/parser-readline": "^12.0.0"
   }
 }
