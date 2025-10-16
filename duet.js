@@ -17,6 +17,7 @@ class Duet extends EventEmitter {
     this.serialPort = null;
     this.parser = null;
     this.ready = false;
+    this.initializing = false;
     
     // Machine configuration
     this.config = {
@@ -31,6 +32,10 @@ class Duet extends EventEmitter {
       lastUpdate: null
     };
     
+    // Command queue
+    this.commandQueue = [];
+    this.processingCommand = false;
+    
     if (!this.devMode) {
       this.initialize();
     } else {
@@ -40,8 +45,16 @@ class Duet extends EventEmitter {
     }
   }
   
-  // Initialize serial connection
+  // Initialize serial connection (only called once)
   initialize() {
+    if (this.initializing || this.ready) {
+      console.log('Duet: Already initialized or initializing');
+      return;
+    }
+    
+    this.initializing = true;
+    console.log(`Duet: Attempting to open serial port: ${this.serialPath}`);
+    
     try {
       this.serialPort = new SerialPort({
         path: this.serialPath,
@@ -51,14 +64,21 @@ class Duet extends EventEmitter {
       
       this.parser = this.serialPort.pipe(new ReadlineParser({ delimiter: '\n' }));
       
+      console.log('Duet: Serial port created, attempting to open...');
+      
       this.serialPort.open((err) => {
         if (err) {
           console.error('Duet: Error opening serial port:', err.message);
+          console.error('Duet: Full error:', err);
           this.ready = false;
+          this.initializing = false;
           this.emit('error', err);
         } else {
           console.log('Duet: Serial port opened successfully');
+          console.log('Duet: Port path:', this.serialPath);
+          console.log('Duet: Baud rate:', this.baudRate);
           this.ready = true;
+          this.initializing = false;
           this.emit('ready');
         }
       });
@@ -71,18 +91,25 @@ class Duet extends EventEmitter {
       
       this.serialPort.on('error', (err) => {
         console.error('Duet: Serial port error:', err.message);
-        this.ready = false;
+        // Don't set ready to false on error, just log it
         this.emit('error', err);
       });
       
       this.serialPort.on('close', () => {
-        console.log('Duet: Serial port closed');
+        console.log('Duet: Serial port closed unexpectedly');
         this.ready = false;
         this.emit('close');
+        // Attempt to reconnect after a delay
+        setTimeout(() => {
+          console.log('Duet: Attempting to reconnect...');
+          this.initializing = false;
+          this.initialize();
+        }, 5000);
       });
       
     } catch (error) {
       console.error('Duet: Failed to initialize:', error.message);
+      this.initializing = false;
       this.emit('error', error);
     }
   }
@@ -106,11 +133,27 @@ class Duet extends EventEmitter {
     }
   }
   
+  // Wait for ready state with timeout
+  async waitForReady(maxWaitMs = 10000) {
+    if (this.ready) return true;
+    
+    const startTime = Date.now();
+    
+    while (!this.ready && (Date.now() - startTime) < maxWaitMs) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    return this.ready;
+  }
+  
   // Send G-code command
   sendGCode(command, timeout = null) {
-    return new Promise((resolve, reject) => {
-      if (!this.ready) {
-        return reject(new Error('Duet not ready'));
+    return new Promise(async (resolve, reject) => {
+      // Wait for ready state
+      const isReady = await this.waitForReady(10000);
+      
+      if (!isReady) {
+        return reject(new Error('Duet not ready - serial connection failed or timed out'));
       }
       
       // DEV MODE: Simulate responses
@@ -313,10 +356,17 @@ class Duet extends EventEmitter {
     return this.ready;
   }
   
-  // Close connection
+  // Gracefully close connection (only on shutdown)
   close() {
+    console.log('Duet: Closing serial connection...');
     if (this.serialPort && this.serialPort.isOpen) {
-      this.serialPort.close();
+      this.serialPort.close((err) => {
+        if (err) {
+          console.error('Duet: Error closing port:', err.message);
+        } else {
+          console.log('Duet: Serial port closed');
+        }
+      });
     }
   }
 }
