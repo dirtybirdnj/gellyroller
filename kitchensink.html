@@ -3,37 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Duet Controller API - Kitchen Sink</title>
+    <title>Gellyroller API - Kitchen Sink</title>
 </head>
 <body>
-    <h1>Duet Controller API Test Interface</h1>
-    <p>Test all API endpoints using the forms below. Results will appear in a new page.</p>
+    <h1>Gellyroller API Test Interface</h1>
+    <p>Test all API endpoints using the forms below. Results will appear in the response area.</p>
+    
+    <h2>Response</h2>
+    <textarea id="response" disabled rows="15" cols="100">Waiting for response...</textarea>
+    
     <hr>
 
     <h2>Status & Information</h2>
     
     <h3>Health Check</h3>
-    <form action="/health" method="GET" target="_blank">
+    <form data-action="/health" data-method="GET">
         <button type="submit">Get Health Status</button>
     </form>
 
     <h3>Get Position</h3>
-    <form action="/position" method="GET" target="_blank">
+    <form data-action="/position" data-method="GET">
         <button type="submit">Get Current Position</button>
     </form>
 
     <h3>Get State</h3>
-    <form action="/state" method="GET" target="_blank">
+    <form data-action="/state" data-method="GET">
         <button type="submit">Get Full State</button>
     </form>
 
     <h3>Get Status</h3>
-    <form action="/status" method="GET" target="_blank">
+    <form data-action="/status" data-method="GET">
         <button type="submit">Get Status Summary</button>
     </form>
 
     <h3>Get Configuration</h3>
-    <form action="/config" method="GET" target="_blank">
+    <form data-action="/config" data-method="GET">
         <button type="submit">Get Machine Config</button>
     </form>
 
@@ -42,13 +46,13 @@
     <h2>Movement & Control</h2>
 
     <h3>Home All Axes</h3>
-    <form action="/home" method="POST" target="_blank">
+    <form data-action="/home" data-method="POST">
         <label>Axes (optional, e.g., "X Y"): <input type="text" name="axes"></label><br>
         <button type="submit">Home</button>
     </form>
 
     <h3>Go To Location (Fast)</h3>
-    <form action="/goto/fast" method="POST" target="_blank">
+    <form data-action="/goto/fast" data-method="POST">
         <label>X: <input type="number" name="x" step="0.01"></label><br>
         <label>Y: <input type="number" name="y" step="0.01"></label><br>
         <label>Z: <input type="number" name="z" step="0.01"></label><br>
@@ -56,7 +60,7 @@
     </form>
 
     <h3>Go To Location (Slow)</h3>
-    <form action="/goto/slow" method="POST" target="_blank">
+    <form data-action="/goto/slow" data-method="POST">
         <label>X: <input type="number" name="x" step="0.01"></label><br>
         <label>Y: <input type="number" name="y" step="0.01"></label><br>
         <label>Z: <input type="number" name="z" step="0.01"></label><br>
@@ -65,17 +69,17 @@
     </form>
 
     <h3>Pause Operation</h3>
-    <form action="/pause" method="POST" target="_blank">
+    <form data-action="/pause" data-method="POST">
         <button type="submit">Pause</button>
     </form>
 
     <h3>Cancel Operation</h3>
-    <form action="/cancel" method="POST" target="_blank">
+    <form data-action="/cancel" data-method="POST">
         <button type="submit">Cancel/Stop</button>
     </form>
 
     <h3>Emergency Stop</h3>
-    <form action="/emergency-stop" method="POST" target="_blank">
+    <form data-action="/emergency-stop" data-method="POST">
         <button type="submit">EMERGENCY STOP</button>
     </form>
 
@@ -84,17 +88,17 @@
     <h2>G-code & Files</h2>
 
     <h3>List SD Card Files</h3>
-    <form action="/sd/files" method="GET" target="_blank">
+    <form data-action="/sd/files" data-method="GET">
         <button type="submit">List Files</button>
     </form>
 
     <h3>Get SD Card Info</h3>
-    <form action="/sd/info" method="GET" target="_blank">
+    <form data-action="/sd/info" data-method="GET">
         <button type="submit">Get SD Info</button>
     </form>
 
     <h3>Upload File to SD Card</h3>
-    <form action="/sd/upload" method="POST" target="_blank">
+    <form data-action="/sd/upload" data-method="POST">
         <label>Filename: <input type="text" name="filename" required placeholder="myfile.g"></label><br>
         <label>G-code Content:</label><br>
         <textarea name="content" rows="10" cols="50" required placeholder="G28&#10;G0 X100 Y100&#10;M0"></textarea><br>
@@ -102,13 +106,13 @@
     </form>
 
     <h3>Execute G-code File</h3>
-    <form action="/execute" method="POST" target="_blank">
+    <form data-action="/execute" data-method="POST">
         <label>Filename: <input type="text" name="filename" required></label><br>
         <button type="submit">Execute File</button>
     </form>
 
     <h3>Send Raw G-code</h3>
-    <form action="/gcode" method="POST" target="_blank">
+    <form data-action="/gcode" data-method="POST">
         <label>G-code Command: <input type="text" name="command" required placeholder="e.g., G28 X Y"></label><br>
         <button type="submit">Send G-code</button>
     </form>
@@ -118,14 +122,14 @@
     <h2>GPIO Control</h2>
 
     <h3>Set GPIO Pin</h3>
-    <form action="/gpio/send" method="POST" target="_blank">
+    <form data-action="/gpio/send" data-method="POST">
         <label>Pin: <input type="number" name="pin" required></label><br>
         <label>Value: <input type="number" name="value" required></label><br>
         <button type="submit">Set GPIO</button>
     </form>
 
     <h3>Read GPIO Pin</h3>
-    <form action="/gpio/read" method="GET" target="_blank">
+    <form data-action="/gpio/read" data-method="GET">
         <label>Pin: <input type="number" name="pin" required></label><br>
         <button type="submit">Read GPIO</button>
     </form>
@@ -135,30 +139,117 @@
     <h2>System Management</h2>
 
     <h3>Get System Uptime</h3>
-    <form action="/system/uptime" method="GET" target="_blank">
+    <form data-action="/system/uptime" data-method="GET">
         <button type="submit">Get Uptime</button>
     </form>
 
     <h3>Schedule System Shutdown</h3>
-    <form action="/system/shutdown" method="POST" target="_blank">
+    <form data-action="/system/shutdown" data-method="POST">
         <label>Minutes (default 5): <input type="number" name="minutes" min="0"></label><br>
         <button type="submit">Schedule Shutdown</button>
     </form>
 
     <h3>Cancel Scheduled Shutdown</h3>
-    <form action="/system/shutdown/cancel" method="POST" target="_blank">
+    <form data-action="/system/shutdown/cancel" data-method="POST">
         <button type="submit">Cancel Shutdown</button>
     </form>
 
     <h3>Restart System</h3>
-    <form action="/system/restart" method="POST" target="_blank">
+    <form data-action="/system/restart" data-method="POST">
         <button type="submit">Restart Raspberry Pi</button>
     </form>
 
     <hr>
 
     <footer>
-        <p><small>Duet Controller API Kitchen Sink - Test all endpoints</small></p>
+        <p><small>Gellyroller API Kitchen Sink - Test all endpoints</small></p>
     </footer>
+
+    <script>
+        // Get response textarea
+        const responseArea = document.getElementById('response');
+
+        // Function to display response
+        function displayResponse(data) {
+            responseArea.value = JSON.stringify(data, null, 2);
+        }
+
+        // Function to display error
+        function displayError(error) {
+            responseArea.value = 'Error: ' + error.message;
+        }
+
+        // Function to get form data as object
+        function getFormData(form) {
+            const formData = new FormData(form);
+            const data = {};
+            
+            for (const [key, value] of formData.entries()) {
+                if (value !== '') {
+                    // Convert to number if it's a number input
+                    const input = form.elements[key];
+                    if (input && input.type === 'number' && value !== '') {
+                        data[key] = parseFloat(value);
+                    } else {
+                        data[key] = value;
+                    }
+                }
+            }
+            
+            return data;
+        }
+
+        // Function to make API request
+        async function makeRequest(url, method, data) {
+            responseArea.value = 'Loading...';
+            
+            try {
+                const options = {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                };
+
+                // Add body for POST/PUT requests
+                if (method === 'POST' || method === 'PUT') {
+                    options.body = JSON.stringify(data);
+                }
+
+                // Add query params for GET requests
+                if (method === 'GET' && Object.keys(data).length > 0) {
+                    const params = new URLSearchParams(data);
+                    url += '?' + params.toString();
+                }
+
+                const response = await fetch(url, options);
+                const result = await response.json();
+                
+                displayResponse({
+                    status: response.status,
+                    statusText: response.statusText,
+                    data: result
+                });
+            } catch (error) {
+                displayError(error);
+            }
+        }
+
+        // Add event listeners to all forms
+        document.querySelectorAll('form').forEach(form => {
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const action = form.getAttribute('data-action');
+                const method = form.getAttribute('data-method');
+                const data = getFormData(form);
+                
+                await makeRequest(action, method, data);
+            });
+        });
+
+        // Initial message
+        responseArea.value = 'Ready. Submit a form to see the response.';
+    </script>
 </body>
 </html>
