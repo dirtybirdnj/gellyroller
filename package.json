@@ -8,6 +8,7 @@
     "start": "node express.js",
     "dev": "node express.js",
     "test": "node tests.js",
+    "deploy": "git pull && sudo systemctl restart nginx && pm2 restart gellyroller",
     "pm2:start": "pm2 start express.js --name gellyroller",
     "pm2:restart": "pm2 restart gellyroller",
     "pm2:stop": "pm2 stop gellyroller",
