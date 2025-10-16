@@ -78,12 +78,6 @@ process.on('SIGINT', async () => {
     // Close Duet connection cleanly
     duet.close();   
     
-    // Shutdown system if not in dev mode
-    if (!DEV_MODE) {
-      console.log('Initiating system shutdown...');
-      await system.shutdown(0); // Immediate shutdown
-    }
-    
     // Close server
     server.close(() => {
       console.log('Server closed');
