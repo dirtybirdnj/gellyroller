@@ -7,10 +7,12 @@ const router = express.Router();
 // Routes will be initialized with duet and system instances
 let duet;
 let system;
+let webcam;
 
-export function initializeRoutes(duetInstance, systemInstance) {
+export function initializeRoutes(duetInstance, systemInstance, webcamInstance) {
   duet = duetInstance;
   system = systemInstance;
+  webcam = webcamInstance;
   return router;
 }
 
@@ -274,6 +276,60 @@ router.post('/system/restart', async (req, res) => {
 router.get('/system/uptime', async (req, res) => {
   try {
     const result = await system.getUptime();
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Webcam Routes
+
+// Capture photo
+router.post('/webcam/photo', async (req, res) => {
+  try {
+    const { filename } = req.body;
+    const result = await webcam.capturePhoto({ filename });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get webcam configuration
+router.get('/webcam/config', async (req, res) => {
+  try {
+    const config = await webcam.getConfig();
+    res.json({ success: true, data: config });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// List captured images
+router.get('/webcam/images', async (req, res) => {
+  try {
+    const result = await webcam.listImages();
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delete an image
+router.delete('/webcam/images/:filename', async (req, res) => {
+  try {
+    const { filename } = req.params;
+    const result = await webcam.deleteImage(filename);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Test webcam
+router.get('/webcam/test', async (req, res) => {
+  try {
+    const result = await webcam.testWebcam();
     res.json({ success: true, data: result });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });

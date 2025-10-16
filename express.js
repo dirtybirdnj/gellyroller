@@ -6,6 +6,7 @@ import 'dotenv/config';
 import express from 'express';
 import Duet from './duet.js';
 import System from './system.js';
+import Webcam from './webcam.js';
 import { initializeRoutes } from './routes.js';
 
 const app = express();
@@ -38,6 +39,13 @@ const system = new System({
   defaultShutdownMinutes: parseInt(process.env.DEFAULT_SHUTDOWN_MINUTES) || 5
 });
 
+// Initialize Webcam controller
+const webcam = new Webcam({
+  devMode: DEV_MODE,
+  device: process.env.WEBCAM_DEVICE || '/dev/video0',
+  imageDir: '/var/www/gellyroller/img'
+});
+
 // Event listeners for connection monitoring
 duet.on('ready', () => {
   console.log('Duet controller ready');
@@ -56,7 +64,7 @@ duet.on('position', (position) => {
 });
 
 // Initialize and mount routes - passes the SAME duet instance to all routes
-const routes = initializeRoutes(duet, system);
+const routes = initializeRoutes(duet, system, webcam);
 app.use('/', routes);
 
 // 404 handler
@@ -129,6 +137,11 @@ const server = app.listen(PORT, () => {
   console.log('  POST /system/shutdown/cancel - Cancel scheduled shutdown');
   console.log('  POST /system/restart - Restart Raspberry Pi');
   console.log('  GET  /system/uptime - Get system uptime');
+  console.log('  POST /webcam/photo - Capture photo');
+  console.log('  GET  /webcam/config - Get webcam configuration');
+  console.log('  GET  /webcam/images - List captured images');
+  console.log('  DELETE /webcam/images/:filename - Delete image');
+  console.log('  GET  /webcam/test - Test webcam');  
 });
 
-export { app, server, duet, system };
+export { app, server, duet, system, webcam };
