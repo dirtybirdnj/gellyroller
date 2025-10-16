@@ -76,7 +76,7 @@ process.on('SIGINT', async () => {
   
   try {
     // Close Duet connection cleanly
-    duet.close();
+    duet.close();   
     
     // Shutdown system if not in dev mode
     if (!DEV_MODE) {

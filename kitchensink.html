@@ -7,9 +7,12 @@
 </head>
 <body>
     <h1>Gellyroller API Test Interface</h1>
-    <p>Test all API endpoints using the forms below. Results will appear in the response area.</p>
+    <p>Test all API endpoints using the forms below. Results will appear in the response areas.</p>
     
-    <h2>Response</h2>
+    <h2>Data Output</h2>
+    <textarea id="dataOutput" disabled rows="8" cols="100">Waiting for data...</textarea>
+    
+    <h2>Full Response</h2>
     <textarea id="response" disabled rows="15" cols="100">Waiting for response...</textarea>
     
     <hr>
@@ -166,17 +169,44 @@
     </footer>
 
     <script>
-        // Get response textarea
+        // Get textareas
         const responseArea = document.getElementById('response');
+        const dataOutputArea = document.getElementById('dataOutput');
 
-        // Function to display response
+        // Function to extract and display data
+        function displayData(responseData) {
+            // Check if response has a data property
+            if (responseData && responseData.data && responseData.data.data !== undefined) {
+                let dataValue = responseData.data.data;
+                
+                // If data is an object or array, stringify it
+                if (typeof dataValue === 'object') {
+                    dataValue = JSON.stringify(dataValue, null, 2);
+                }
+                
+                // Convert to string if not already
+                dataValue = String(dataValue);
+                
+                // Convert \n to actual newlines for display
+                dataValue = dataValue.replace(/\\n/g, '\n');
+                
+                // Display in data output area
+                dataOutputArea.value = dataValue;
+            } else {
+                dataOutputArea.value = 'No data field in response';
+            }
+        }
+
+        // Function to display full response
         function displayResponse(data) {
             responseArea.value = JSON.stringify(data, null, 2);
+            displayData(data);
         }
 
         // Function to display error
         function displayError(error) {
             responseArea.value = 'Error: ' + error.message;
+            dataOutputArea.value = 'Error occurred';
         }
 
         // Function to get form data as object
@@ -202,6 +232,7 @@
         // Function to make API request
         async function makeRequest(url, method, data) {
             responseArea.value = 'Loading...';
+            dataOutputArea.value = 'Loading...';
             
             try {
                 const options = {
@@ -248,8 +279,9 @@
             });
         });
 
-        // Initial message
+        // Initial messages
         responseArea.value = 'Ready. Submit a form to see the response.';
+        dataOutputArea.value = 'Ready. Data output will appear here.';
     </script>
 </body>
 </html>
