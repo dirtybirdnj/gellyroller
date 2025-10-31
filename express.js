@@ -8,6 +8,7 @@ import Duet from './duet.js';
 import System from './system.js';
 import Webcam from './webcam.js';
 import { initializeRoutes } from './routes.js';
+import { displayBanner, displayRoutes, routes as routeDefinitions } from './ascii-art.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -110,38 +111,18 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // Initialize and start
 const server = app.listen(PORT, () => {
-  console.log(`Duet Controller API running on http://localhost:${PORT}`);
-  console.log(`Mode: ${DEV_MODE ? 'DEVELOPMENT (Simulated)' : 'PRODUCTION'}`);
-  console.log(`Serial Path: ${SERIAL_PATH}`);
-  console.log(`Duet Status: ${duet.isReady() ? 'Ready' : 'Initializing...'}`);
-  console.log('Available endpoints:');
-  console.log('  GET  /position - Get current position');
-  console.log('  GET  /state - Get full Duet state');
-  console.log('  GET  /status - Get status summary');
-  console.log('  GET  /config - Get machine configuration');
-  console.log('  PUT  /config - Update machine configuration');
-  console.log('  GET  /sd/files - List SD card files');
-  console.log('  GET  /sd/info - SD card information');
-  console.log('  POST /sd/upload - Upload file to SD card');
-  console.log('  POST /execute - Execute G-code file');
-  console.log('  POST /pause - Pause operation');
-  console.log('  POST /cancel - Cancel operation');
-  console.log('  POST /emergency-stop - Emergency stop');
-  console.log('  POST /home - Home all axes');
-  console.log('  POST /goto/fast - Rapid move');
-  console.log('  POST /goto/slow - Controlled move');
-  console.log('  POST /gpio/send - Set GPIO pin');
-  console.log('  GET  /gpio/read - Read GPIO pin');
-  console.log('  POST /gcode - Send raw G-code');
-  console.log('  POST /system/shutdown - Schedule system shutdown');
-  console.log('  POST /system/shutdown/cancel - Cancel scheduled shutdown');
-  console.log('  POST /system/restart - Restart Raspberry Pi');
-  console.log('  GET  /system/uptime - Get system uptime');
-  console.log('  POST /webcam/photo - Capture photo');
-  console.log('  GET  /webcam/config - Get webcam configuration');
-  console.log('  GET  /webcam/images - List captured images');
-  console.log('  DELETE /webcam/images/:filename - Delete image');
-  console.log('  GET  /webcam/test - Test webcam');  
+  // Display ASCII art banner
+  displayBanner();
+
+  // Display server info
+  console.log(`\x1b[1m\x1b[36m🚀 Server Information:\x1b[0m`);
+  console.log(`   \x1b[32m●\x1b[0m Running on: \x1b[1mhttp://localhost:${PORT}\x1b[0m`);
+  console.log(`   \x1b[32m●\x1b[0m Mode: \x1b[1m${DEV_MODE ? 'DEVELOPMENT (Simulated)' : 'PRODUCTION'}\x1b[0m`);
+  console.log(`   \x1b[32m●\x1b[0m Serial Path: \x1b[1m${SERIAL_PATH}\x1b[0m`);
+  console.log(`   \x1b[32m●\x1b[0m Duet Status: \x1b[1m${duet.isReady() ? '\x1b[32mReady ✓\x1b[0m' : '\x1b[33mInitializing...\x1b[0m'}\x1b[0m\n`);
+
+  // Display color-coded routes
+  displayRoutes(routeDefinitions);
 });
 
 export { app, server, duet, system, webcam };
