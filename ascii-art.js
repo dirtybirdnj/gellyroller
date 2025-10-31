@@ -49,25 +49,8 @@ ${colors.bright}${colors.magenta}
 ${colors.reset}
 ${colors.cyan}${colors.bright}                                  🔗 https://github.com/dirtybirdnj/gellyroller${colors.reset}
 
-${colors.yellow}
-                                     ___________________
-                                    |  ___________  ___ \\
-                                    | |           || = ||
-                                    | |___________||___||
-                                    |               ☁︎  |
-                                    |  ╔═══════════════╗|
-               ${colors.red}GELLYROLLER${colors.yellow}       |  ║ █████████████ ║|
-                                    |  ║ █████████████ ║|
-                                    |  ╚═══════════════╝|
-                                   /|___________________|\\
-                                  / /  ██           ██  \\ \\
-                                 /_/___/══\\___()___/══\\___\\_\\
-                                      /    \\       /    \\
-                                     /______\\     /______\\
-
-                                            ${colors.magenta}🌸  ← sakura${colors.reset}
 ${colors.dim}${colors.white}
-    "A CNC drawing machine that makes gel pens roll across paper like a steamroller over delicate flowers"
+    "An Express API to control a CNC drawing machine that brings gel pen art to life"
 ${colors.reset}
 `;
 
