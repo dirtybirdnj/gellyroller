@@ -259,6 +259,61 @@
         .layer.active { background: #ff0; color: #000; }
         .layer.completed { background: var(--accent); color: #fff; }
 
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 2px;
+            margin-bottom: 6px;
+        }
+        .tab {
+            flex: 1;
+            padding: 6px 8px;
+            background: var(--bg-tertiary);
+            border: none;
+            border-radius: 4px 4px 0 0;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 10px;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+        }
+        .tab:hover { color: var(--text-primary); }
+        .tab.active {
+            background: var(--bg-secondary);
+            color: var(--accent);
+            border-bottom: 2px solid var(--accent);
+        }
+        .tab-content { display: none; flex-direction: column; gap: 4px; flex: 1; }
+        .tab-content.active { display: flex; }
+
+        /* File list */
+        .file-list {
+            flex: 1;
+            overflow-y: auto;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            min-height: 60px;
+        }
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 8px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            font-size: 10px;
+            transition: background 0.2s;
+        }
+        .file-item:hover { background: var(--bg-secondary); }
+        .file-item:last-child { border-bottom: none; }
+        .file-item.selected { background: var(--accent); color: var(--btn-primary-text); }
+        .file-name { font-weight: bold; }
+        .file-meta { font-size: 8px; color: var(--text-secondary); }
+        .file-item.selected .file-meta { color: inherit; opacity: 0.8; }
+        .file-actions { display: flex; gap: 4px; }
+        .file-actions button { padding: 4px 8px; font-size: 9px; }
+        .no-files { padding: 12px; text-align: center; color: var(--text-secondary); font-size: 10px; }
+
         /* Upload area */
         .upload-row {
             display: flex;
@@ -389,16 +444,35 @@
                 </div>
             </div>
 
-            <!-- Upload -->
+            <!-- G-code Files (Tabbed) -->
             <div class="panel" style="flex: 1;">
-                <h2>UPLOAD G-CODE</h2>
-                <div class="upload-row">
-                    <input type="file" id="fileInput" accept=".gcode,.g,.nc">
+                <div class="tabs">
+                    <button class="tab active" onclick="switchTab('files')">FILES</button>
+                    <button class="tab" onclick="switchTab('upload')">UPLOAD</button>
                 </div>
-                <textarea id="gcodeInput" placeholder="Or paste G-code here..."></textarea>
-                <div class="upload-buttons">
-                    <button class="btn-secondary" onclick="uploadJob()">UPLOAD</button>
-                    <button id="btnStart" class="btn-primary" onclick="startJob()" disabled>START</button>
+
+                <!-- Files Tab -->
+                <div id="tabFiles" class="tab-content active">
+                    <div class="file-list" id="fileList">
+                        <div class="no-files">Loading...</div>
+                    </div>
+                    <div class="file-actions">
+                        <button class="btn-secondary" onclick="refreshFiles()">REFRESH</button>
+                        <button id="btnLoadFile" class="btn-secondary" onclick="loadSelectedFile()" disabled>LOAD</button>
+                        <button id="btnStart" class="btn-primary" onclick="startJob()" disabled>START</button>
+                    </div>
+                </div>
+
+                <!-- Upload Tab -->
+                <div id="tabUpload" class="tab-content">
+                    <div class="upload-row">
+                        <input type="file" id="fileInput" accept=".gcode,.g,.nc">
+                    </div>
+                    <textarea id="gcodeInput" placeholder="Paste G-code here..."></textarea>
+                    <div class="upload-buttons">
+                        <button class="btn-secondary" onclick="uploadJob()">UPLOAD</button>
+                        <button class="btn-secondary" onclick="saveToLibrary()">SAVE TO FILES</button>
+                    </div>
                 </div>
             </div>
 
@@ -920,11 +994,161 @@
             }
         }
 
+        // ============================================================================
+        // File Management
+        // ============================================================================
+
+        let selectedFile = null;
+        let fileCache = [];
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+            if (tab === 'files') {
+                document.querySelector('.tab:first-child').classList.add('active');
+                document.getElementById('tabFiles').classList.add('active');
+                refreshFiles();
+            } else {
+                document.querySelector('.tab:last-child').classList.add('active');
+                document.getElementById('tabUpload').classList.add('active');
+            }
+        }
+
+        async function refreshFiles() {
+            const listEl = document.getElementById('fileList');
+            listEl.innerHTML = '<div class="no-files">Loading...</div>';
+
+            const result = await api('GET', '/files');
+            if (!result.success) {
+                listEl.innerHTML = `<div class="no-files">Error: ${result.error}</div>`;
+                return;
+            }
+
+            fileCache = result.data;
+
+            if (fileCache.length === 0) {
+                listEl.innerHTML = '<div class="no-files">No G-code files found</div>';
+                return;
+            }
+
+            listEl.innerHTML = fileCache.map(f => `
+                <div class="file-item" onclick="selectFile('${f.name}')" data-name="${f.name}">
+                    <div>
+                        <div class="file-name">${f.name}</div>
+                        <div class="file-meta">${formatSize(f.size)} - ${formatDate(f.modified)}</div>
+                    </div>
+                </div>
+            `).join('');
+
+            selectedFile = null;
+            document.getElementById('btnLoadFile').disabled = true;
+        }
+
+        function selectFile(name) {
+            selectedFile = name;
+
+            document.querySelectorAll('.file-item').forEach(el => {
+                el.classList.toggle('selected', el.dataset.name === name);
+            });
+
+            document.getElementById('btnLoadFile').disabled = false;
+            log(`Selected: ${name}`, 'info');
+        }
+
+        async function loadSelectedFile() {
+            if (!selectedFile) return;
+
+            log(`Loading ${selectedFile}...`, 'info');
+
+            // First get the file content for preview
+            const fileResult = await api('GET', `/files/${encodeURIComponent(selectedFile)}`);
+            if (fileResult.success) {
+                parseGcode(fileResult.data.content);
+            }
+
+            // Then create a job from it
+            const result = await api('POST', `/files/${encodeURIComponent(selectedFile)}/load`);
+
+            if (result.success) {
+                currentJobId = result.data.jobId;
+                log(`Loaded: ${currentJobId.slice(0, 8)}`, 'success');
+
+                document.getElementById('jobFilename').textContent = selectedFile;
+                document.getElementById('jobStatus').textContent = 'Ready';
+                document.getElementById('totalLines').textContent = result.data.stats.totalLines;
+                document.getElementById('totalLayers').textContent = result.data.layers.length;
+                document.getElementById('statLines').textContent = result.data.stats.totalLines;
+                document.getElementById('statMoves').textContent = result.data.stats.movementCommands;
+                document.getElementById('statTime').textContent = formatTime(result.data.stats.estimatedTimeMs);
+
+                const layersEl = document.getElementById('layersContainer');
+                layersEl.innerHTML = result.data.layers.map((l, i) =>
+                    `<div class="layer">${l.name || 'L' + (i+1)}</div>`
+                ).join('');
+
+                if (ws?.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'subscribe', data: { jobId: currentJobId } }));
+                }
+
+                document.getElementById('btnStart').disabled = false;
+            } else {
+                log(`Failed: ${result.error}`, 'error');
+            }
+        }
+
+        async function saveToLibrary() {
+            const fileInput = document.getElementById('fileInput');
+            const gcodeInput = document.getElementById('gcodeInput');
+
+            let filename = 'untitled.gcode';
+            let content = gcodeInput.value;
+
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                filename = file.name;
+                content = await file.text();
+            }
+
+            if (!content.trim()) {
+                alert('No G-code to save');
+                return;
+            }
+
+            // Prompt for filename
+            filename = prompt('Save as:', filename) || filename;
+            if (!filename.match(/\.(gcode|g|nc)$/i)) {
+                filename += '.gcode';
+            }
+
+            log(`Saving ${filename}...`, 'info');
+            const result = await api('POST', '/files', { filename, content });
+
+            if (result.success) {
+                log(`Saved: ${filename}`, 'success');
+                switchTab('files');
+            } else {
+                log(`Failed: ${result.error}`, 'error');
+            }
+        }
+
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+        }
+
+        function formatDate(iso) {
+            const d = new Date(iso);
+            return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
         // Init
         loadTheme();
         initCanvas();
         connect();
         getPosition();
+        refreshFiles();
         setInterval(getPosition, 5000);
     </script>
 </body>

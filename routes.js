@@ -1,6 +1,11 @@
 // API Routes for Duet Controller
 
 import express from 'express';
+import fs from 'fs/promises';
+import path from 'path';
+
+// Local G-code storage directory
+const GCODE_DIR = process.env.GCODE_DIR || '/var/lib/gellyroller/gcode';
 
 const router = express.Router();
 
@@ -528,6 +533,154 @@ router.get('/job/:id/progress', (req, res) => {
     }
     res.json({ success: true, data: progress });
   } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================================================
+// Local G-code File Management
+// ============================================================================
+
+// List local G-code files
+router.get('/files', async (req, res) => {
+  try {
+    // Ensure directory exists
+    await fs.mkdir(GCODE_DIR, { recursive: true });
+
+    const entries = await fs.readdir(GCODE_DIR, { withFileTypes: true });
+    const files = [];
+
+    for (const entry of entries) {
+      if (entry.isFile() && /\.(gcode|g|nc)$/i.test(entry.name)) {
+        const filePath = path.join(GCODE_DIR, entry.name);
+        const stats = await fs.stat(filePath);
+        files.push({
+          name: entry.name,
+          size: stats.size,
+          modified: stats.mtime.toISOString()
+        });
+      }
+    }
+
+    // Sort by modified date, newest first
+    files.sort((a, b) => new Date(b.modified) - new Date(a.modified));
+
+    res.json({ success: true, data: files });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get file contents
+router.get('/files/:name', async (req, res) => {
+  try {
+    const filename = req.params.name;
+    // Prevent path traversal
+    if (filename.includes('..') || filename.includes('/')) {
+      return res.status(400).json({ success: false, error: 'Invalid filename' });
+    }
+
+    const filePath = path.join(GCODE_DIR, filename);
+    const content = await fs.readFile(filePath, 'utf-8');
+    const stats = await fs.stat(filePath);
+
+    res.json({
+      success: true,
+      data: {
+        name: filename,
+        content: content,
+        size: stats.size,
+        modified: stats.mtime.toISOString()
+      }
+    });
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return res.status(404).json({ success: false, error: 'File not found' });
+    }
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Save/upload a file to local storage
+router.post('/files', async (req, res) => {
+  try {
+    const { filename, content } = req.body;
+    if (!filename || !content) {
+      return res.status(400).json({ success: false, error: 'Filename and content required' });
+    }
+
+    // Prevent path traversal
+    if (filename.includes('..') || filename.includes('/')) {
+      return res.status(400).json({ success: false, error: 'Invalid filename' });
+    }
+
+    // Ensure directory exists
+    await fs.mkdir(GCODE_DIR, { recursive: true });
+
+    const filePath = path.join(GCODE_DIR, filename);
+    await fs.writeFile(filePath, content, 'utf-8');
+
+    const stats = await fs.stat(filePath);
+    res.json({
+      success: true,
+      data: {
+        name: filename,
+        size: stats.size,
+        modified: stats.mtime.toISOString()
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delete a file
+router.delete('/files/:name', async (req, res) => {
+  try {
+    const filename = req.params.name;
+    if (filename.includes('..') || filename.includes('/')) {
+      return res.status(400).json({ success: false, error: 'Invalid filename' });
+    }
+
+    const filePath = path.join(GCODE_DIR, filename);
+    await fs.unlink(filePath);
+
+    res.json({ success: true, message: 'File deleted' });
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return res.status(404).json({ success: false, error: 'File not found' });
+    }
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Load a file and create a job (ready to start)
+router.post('/files/:name/load', async (req, res) => {
+  try {
+    const filename = req.params.name;
+    if (filename.includes('..') || filename.includes('/')) {
+      return res.status(400).json({ success: false, error: 'Invalid filename' });
+    }
+
+    const filePath = path.join(GCODE_DIR, filename);
+    const content = await fs.readFile(filePath, 'utf-8');
+
+    // Create a job from the file
+    const job = jobManager.createJob(filename, content);
+
+    res.json({
+      success: true,
+      data: {
+        jobId: job.id,
+        filename: job.filename,
+        stats: job.stats,
+        layers: job.layers
+      }
+    });
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return res.status(404).json({ success: false, error: 'File not found' });
+    }
     res.status(500).json({ success: false, error: error.message });
   }
 });
