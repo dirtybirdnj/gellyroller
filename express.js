@@ -83,6 +83,38 @@ wsServer.startHeartbeat();
 // Initialize Job Manager (connects duet, parser, and websocket)
 const jobManager = new JobManager(duet, wsServer, { devMode: DEV_MODE });
 
+// Position polling - broadcast updates to all WebSocket clients
+let lastPosition = { x: null, y: null, z: null };
+const POSITION_POLL_INTERVAL = 500; // ms
+
+async function pollPosition() {
+  if (!duet.ready) return;
+
+  try {
+    const position = await duet.getPosition();
+
+    // Only broadcast if position changed
+    if (position.x !== lastPosition.x ||
+        position.y !== lastPosition.y ||
+        position.z !== lastPosition.z) {
+      lastPosition = { ...position };
+      wsServer.emitPosition(position);
+    }
+  } catch (err) {
+    // Silently ignore polling errors
+  }
+}
+
+// Start polling when Duet is ready
+duet.on('ready', () => {
+  setInterval(pollPosition, POSITION_POLL_INTERVAL);
+});
+
+// If already ready (dev mode), start immediately
+if (duet.ready) {
+  setInterval(pollPosition, POSITION_POLL_INTERVAL);
+}
+
 // Initialize and mount routes (with all dependencies)
 const routes = initializeRoutes(duet, system, webcam, jobManager);
 app.use('/', routes);

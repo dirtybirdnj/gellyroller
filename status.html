@@ -3,240 +3,695 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gellyroller Status</title>
+    <title>Gellyroller</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: monospace; padding: 20px; max-width: 900px; margin: 0 auto; }
-        h1 { margin-bottom: 10px; }
-        h2 { margin: 20px 0 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .panel { border: 1px solid #ccc; padding: 15px; }
-        .status-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
-        .status-connected { background: #0a0; }
-        .status-disconnected { background: #a00; }
-        .progress-bar { width: 100%; height: 24px; background: #eee; margin: 10px 0; }
-        .progress-fill { height: 100%; background: #4a4; transition: width 0.3s; }
-        .layers { display: flex; gap: 5px; flex-wrap: wrap; margin: 10px 0; }
-        .layer { padding: 5px 10px; border: 1px solid #999; font-size: 12px; }
-        .layer.active { background: #ff0; font-weight: bold; }
-        .layer.completed { background: #cfc; }
-        button { padding: 8px 16px; margin: 5px 5px 5px 0; cursor: pointer; }
-        button.danger { background: #c00; color: white; border: none; }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
-        textarea { width: 100%; font-family: monospace; }
-        input[type="file"], input[type="text"] { margin: 5px 0; }
-        .stats { font-size: 14px; }
-        .stats dt { font-weight: bold; float: left; width: 120px; }
-        .stats dd { margin-left: 130px; margin-bottom: 5px; }
-        #log { height: 150px; overflow-y: auto; background: #f5f5f5; padding: 10px; font-size: 12px; }
-        .position { font-size: 18px; font-weight: bold; }
+        html, body { height: 100%; }
+
+        /* Light theme (default) */
+        :root {
+            --bg-primary: #f5f5f5;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #e8e8e8;
+            --text-primary: #222;
+            --text-secondary: #666;
+            --accent: #007700;
+            --accent-glow: none;
+            --border: #ccc;
+            --btn-primary-bg: #0a0;
+            --btn-primary-text: #fff;
+            --btn-secondary-bg: #ddd;
+            --btn-secondary-text: #333;
+            --btn-warning-bg: #f90;
+            --btn-warning-text: #000;
+            --btn-danger-bg: #c00;
+            --btn-danger-text: #fff;
+            --log-error: #c00;
+            --log-success: #070;
+            --log-info: #666;
+            --progress-bg: #ddd;
+            --progress-fill: linear-gradient(90deg, #0a0, #070);
+            --canvas-bg: #fff;
+            --canvas-grid: #eee;
+            --canvas-pending: #ccc;
+            --canvas-complete: #0a0;
+            --canvas-current: #f00;
+        }
+
+        /* Dark theme */
+        [data-theme="dark"] {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-tertiary: #0d1b2a;
+            --text-primary: #eee;
+            --text-secondary: #888;
+            --accent: #0f0;
+            --accent-glow: 0 0 10px #0f0;
+            --border: #333;
+            --btn-primary-bg: #0f0;
+            --btn-primary-text: #000;
+            --btn-secondary-bg: #333;
+            --btn-secondary-text: #fff;
+            --btn-warning-bg: #f90;
+            --btn-warning-text: #000;
+            --btn-danger-bg: #f00;
+            --btn-danger-text: #fff;
+            --log-error: #f00;
+            --log-success: #0f0;
+            --log-info: #888;
+            --progress-bg: #0d1b2a;
+            --progress-fill: linear-gradient(90deg, #0f0, #0a0);
+            --canvas-bg: #0d1b2a;
+            --canvas-grid: #1a2a3a;
+            --canvas-pending: #445;
+            --canvas-complete: #0f0;
+            --canvas-current: #f00;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+            height: 100vh;
+            padding: 6px;
+            gap: 6px;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 12px;
+            background: var(--bg-secondary);
+            border-radius: 6px;
+            border: 1px solid var(--border);
+        }
+        header h1 { font-size: 18px; color: var(--accent); }
+        .header-controls { display: flex; align-items: center; gap: 12px; font-size: 11px; }
+        .header-controls button {
+            color: var(--text-secondary);
+            cursor: pointer;
+            background: none;
+            border: none;
+            font-family: inherit;
+            font-size: 11px;
+            padding: 4px 8px;
+        }
+        .header-controls button:hover { color: var(--accent); }
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 4px;
+        }
+        .status-dot.connected { background: var(--accent); box-shadow: var(--accent-glow); }
+        .status-dot.disconnected { background: #c00; }
+
+        /* Main content grid - 2 columns */
+        main {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .panel {
+            background: var(--bg-secondary);
+            border-radius: 6px;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+        .panel h2 {
+            font-size: 11px;
+            color: var(--accent);
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 4px;
+            margin-bottom: 6px;
+        }
+
+        /* Left column */
+        .left-column {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        /* Canvas visualization */
+        .canvas-container {
+            flex: 1;
+            position: relative;
+            min-height: 0;
+        }
+        #gcodeCanvas {
+            width: 100%;
+            height: 100%;
+            background: var(--canvas-bg);
+            border-radius: 4px;
+        }
+        .canvas-overlay {
+            position: absolute;
+            bottom: 5px;
+            left: 5px;
+            font-size: 9px;
+            color: var(--text-secondary);
+            background: var(--bg-secondary);
+            padding: 2px 6px;
+            border-radius: 3px;
+            opacity: 0.9;
+        }
+
+        /* Right column */
+        .right-column {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        /* Stats grid with position */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 4px;
+        }
+        .stat {
+            background: var(--bg-tertiary);
+            padding: 6px 4px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .stat label { font-size: 8px; color: var(--text-secondary); display: block; text-transform: uppercase; }
+        .stat .value { font-size: 13px; color: var(--accent); font-weight: bold; }
+        .stat.position .value { font-size: 12px; }
+
+        /* Controls */
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 4px;
+        }
+        button {
+            padding: 8px 4px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 10px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        button:disabled { opacity: 0.3; cursor: not-allowed; }
+        .btn-primary { background: var(--btn-primary-bg); color: var(--btn-primary-text); }
+        .btn-secondary { background: var(--btn-secondary-bg); color: var(--btn-secondary-text); }
+        .btn-warning { background: var(--btn-warning-bg); color: var(--btn-warning-text); }
+        .btn-danger { background: var(--btn-danger-bg); color: var(--btn-danger-text); }
+
+        /* Job info */
+        .job-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+        .job-filename { font-size: 12px; color: var(--btn-warning-bg); }
+        .job-status { font-size: 10px; color: var(--text-secondary); }
+        .progress-bar {
+            height: 14px;
+            background: var(--progress-bg);
+            border-radius: 7px;
+            overflow: hidden;
+            margin: 4px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: var(--progress-fill);
+            transition: width 0.3s;
+        }
+        .progress-text {
+            display: flex;
+            justify-content: space-between;
+            font-size: 9px;
+            color: var(--text-secondary);
+        }
+
+        /* Layers */
+        .layers-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 3px;
+            max-height: 50px;
+            overflow-y: auto;
+        }
+        .layer {
+            padding: 2px 5px;
+            background: var(--bg-tertiary);
+            border-radius: 3px;
+            font-size: 9px;
+            border: 1px solid var(--border);
+        }
+        .layer.active { background: #ff0; color: #000; }
+        .layer.completed { background: var(--accent); color: #fff; }
+
+        /* Upload area */
+        .upload-row {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+        }
+        .upload-row input[type="file"] { flex: 1; font-size: 9px; }
+        textarea {
+            flex: 1;
+            min-height: 50px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 6px;
+            font-family: inherit;
+            font-size: 9px;
+            resize: none;
+            border-radius: 4px;
+        }
+        .upload-buttons {
+            display: flex;
+            gap: 4px;
+        }
+        .upload-buttons button { flex: 1; }
+
+        /* Log */
+        #log {
+            flex: 1;
+            overflow-y: auto;
+            background: var(--bg-tertiary);
+            padding: 4px;
+            font-size: 8px;
+            border-radius: 4px;
+            line-height: 1.3;
+            min-height: 40px;
+        }
+        #log .error { color: var(--log-error); }
+        #log .success { color: var(--log-success); }
+        #log .info { color: var(--log-info); }
+
+        /* Footer */
+        footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 12px;
+            background: var(--bg-secondary);
+            border-radius: 6px;
+            font-size: 9px;
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
+        footer a { color: var(--accent); text-decoration: none; }
     </style>
 </head>
 <body>
-    <h1>Gellyroller Status</h1>
-    <p>
-        <span id="wsStatus" class="status-indicator status-disconnected"></span>
-        <span id="wsStatusText">Disconnected</span>
-    </p>
+    <header>
+        <h1>GELLYROLLER</h1>
+        <div class="header-controls">
+            <span>
+                <span id="wsStatus" class="status-dot disconnected"></span>
+                <span id="wsStatusText">Connecting...</span>
+            </span>
+            <button onclick="toggleFullscreen()">Fullscreen</button>
+            <button onclick="toggleTheme()">Theme</button>
+        </div>
+    </header>
 
-    <div class="grid">
-        <div class="panel">
-            <h2>Machine</h2>
-            <p class="position">
-                X: <span id="posX">--</span>
-                Y: <span id="posY">--</span>
-                Z: <span id="posZ">--</span>
-            </p>
-            <p>Status: <strong id="machineStatus">--</strong></p>
-            <div style="margin-top: 15px;">
-                <button onclick="home()">Home</button>
-                <button onclick="getPosition()">Refresh Position</button>
-                <button class="danger" onclick="emergencyStop()">EMERGENCY STOP</button>
+    <main>
+        <!-- Left: Visualization -->
+        <div class="left-column">
+            <div class="panel" style="flex: 1;">
+                <h2>PREVIEW</h2>
+                <div class="canvas-container">
+                    <canvas id="gcodeCanvas"></canvas>
+                    <div class="canvas-overlay">
+                        <span id="canvasSize">480 x 480 mm</span>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <div class="panel">
-            <h2>Current Job</h2>
-            <p><strong id="jobFilename">No job loaded</strong></p>
-            <p>Status: <span id="jobStatus">--</span></p>
-            <div class="progress-bar">
-                <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+        <!-- Right: Controls & Info -->
+        <div class="right-column">
+            <!-- Stats row with position -->
+            <div class="panel">
+                <h2>STATUS</h2>
+                <div class="stats-grid">
+                    <div class="stat position"><label>X</label><div class="value" id="posX">--</div></div>
+                    <div class="stat position"><label>Y</label><div class="value" id="posY">--</div></div>
+                    <div class="stat"><label>Lines</label><div class="value" id="statLines">--</div></div>
+                    <div class="stat"><label>Moves</label><div class="value" id="statMoves">--</div></div>
+                    <div class="stat"><label>Progress</label><div class="value" id="progressPercent">0%</div></div>
+                    <div class="stat"><label>Elapsed</label><div class="value" id="elapsed">--</div></div>
+                    <div class="stat"><label>Remaining</label><div class="value" id="remaining">--</div></div>
+                    <div class="stat"><label>Est. Time</label><div class="value" id="statTime">--</div></div>
+                </div>
             </div>
-            <p>
-                <span id="progressPercent">0</span>% complete
-                (<span id="currentLine">0</span> / <span id="totalLines">0</span> lines)
-            </p>
-            <p>
-                Layer: <span id="currentLayer">0</span> / <span id="totalLayers">0</span>
-            </p>
-            <p>
-                Elapsed: <span id="elapsed">--</span> |
-                Remaining: <span id="remaining">--</span>
-            </p>
-            <div style="margin-top: 15px;">
-                <button id="btnPause" onclick="pauseJob()" disabled>Pause</button>
-                <button id="btnResume" onclick="resumeJob()" disabled>Resume</button>
-                <button id="btnCancel" onclick="cancelJob()" disabled>Cancel</button>
+
+            <!-- Controls -->
+            <div class="panel">
+                <h2>CONTROLS</h2>
+                <div class="controls">
+                    <button class="btn-primary" onclick="home()">HOME</button>
+                    <button class="btn-secondary" onclick="getPosition()">REFRESH</button>
+                    <button id="btnPause" class="btn-warning" onclick="pauseJob()" disabled>PAUSE</button>
+                    <button id="btnResume" class="btn-primary" onclick="resumeJob()" disabled>RESUME</button>
+                    <button id="btnCancel" class="btn-secondary" onclick="cancelJob()" disabled>CANCEL</button>
+                    <button class="btn-danger" onclick="emergencyStop()">E-STOP</button>
+                </div>
+            </div>
+
+            <!-- Job info -->
+            <div class="panel">
+                <h2>JOB</h2>
+                <div class="job-header">
+                    <span class="job-filename" id="jobFilename">No job loaded</span>
+                    <span class="job-status" id="jobStatus">--</span>
+                </div>
+                <div class="progress-bar">
+                    <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+                </div>
+                <div class="progress-text">
+                    <span>Line <span id="currentLine">0</span>/<span id="totalLines">0</span></span>
+                    <span>Layer <span id="currentLayer">0</span>/<span id="totalLayers">0</span></span>
+                </div>
+                <div id="layersContainer" class="layers-grid" style="margin-top: 4px;">
+                </div>
+            </div>
+
+            <!-- Upload -->
+            <div class="panel" style="flex: 1;">
+                <h2>UPLOAD G-CODE</h2>
+                <div class="upload-row">
+                    <input type="file" id="fileInput" accept=".gcode,.g,.nc">
+                </div>
+                <textarea id="gcodeInput" placeholder="Or paste G-code here..."></textarea>
+                <div class="upload-buttons">
+                    <button class="btn-secondary" onclick="uploadJob()">UPLOAD</button>
+                    <button id="btnStart" class="btn-primary" onclick="startJob()" disabled>START</button>
+                </div>
+            </div>
+
+            <!-- Log -->
+            <div class="panel">
+                <h2>LOG</h2>
+                <div id="log"></div>
             </div>
         </div>
-    </div>
+    </main>
 
-    <h2>Layers</h2>
-    <div id="layersContainer" class="layers">
-        <em>No layers loaded</em>
-    </div>
-
-    <h2>Upload G-code</h2>
-    <div class="panel">
-        <p>
-            <input type="file" id="fileInput" accept=".gcode,.g,.nc">
-            <span>or</span>
-            <input type="text" id="filenameInput" placeholder="filename.gcode" style="width: 200px;">
-        </p>
-        <textarea id="gcodeInput" rows="8" placeholder="Paste G-code here..."></textarea>
-        <p>
-            <button onclick="uploadJob()">Upload</button>
-            <button id="btnStart" onclick="startJob()" disabled>Start Job</button>
-        </p>
-    </div>
-
-    <h2>Job Stats</h2>
-    <dl id="statsContainer" class="stats">
-        <dt>Total Lines:</dt><dd id="statLines">--</dd>
-        <dt>Movements:</dt><dd id="statMoves">--</dd>
-        <dt>Shapes:</dt><dd id="statShapes">--</dd>
-        <dt>Est. Time:</dt><dd id="statTime">--</dd>
-    </dl>
-
-    <h2>Log</h2>
-    <div id="log"></div>
+    <footer>
+        <span>Gellyroller Pen Plotter</span>
+        <span>
+            <a href="https://github.com/dirtybirdnj/gellyroller" target="_blank">GitHub</a> |
+            <a href="https://github.com/dirtybirdnj/gellyroller#readme" target="_blank">Docs</a>
+        </span>
+    </footer>
 
     <script>
-        // State
+        // Config
+        const MACHINE_WIDTH = 480;
+        const MACHINE_HEIGHT = 480;
+
+        // Canvas state
+        let canvas, ctx;
+        let gcodeLines = [];
+        let parsedMoves = [];
+        let currentLineIndex = 0;
+
+        // Theme
+        function toggleTheme() {
+            const current = document.documentElement.getAttribute('data-theme');
+            document.documentElement.setAttribute('data-theme', current === 'dark' ? '' : 'dark');
+            localStorage.setItem('theme', current === 'dark' ? 'light' : 'dark');
+            drawCanvas();
+        }
+        function loadTheme() {
+            if (localStorage.getItem('theme') === 'dark') {
+                document.documentElement.setAttribute('data-theme', 'dark');
+            }
+        }
+
+        // Fullscreen
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        // Canvas setup
+        function initCanvas() {
+            canvas = document.getElementById('gcodeCanvas');
+            ctx = canvas.getContext('2d');
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+        }
+
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            const size = Math.min(container.clientWidth, container.clientHeight);
+            canvas.width = size;
+            canvas.height = size;
+            drawCanvas();
+        }
+
+        function drawCanvas() {
+            if (!ctx) return;
+            const w = canvas.width;
+            const h = canvas.height;
+            const scale = Math.min(w, h) / Math.max(MACHINE_WIDTH, MACHINE_HEIGHT);
+            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+
+            // Background
+            ctx.fillStyle = isDark ? '#0d1b2a' : '#fff';
+            ctx.fillRect(0, 0, w, h);
+
+            // Grid
+            ctx.strokeStyle = isDark ? '#1a2a3a' : '#eee';
+            ctx.lineWidth = 1;
+            const gridSize = 50 * scale;
+            for (let x = 0; x <= w; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, h);
+                ctx.stroke();
+            }
+            for (let y = 0; y <= h; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(w, y);
+                ctx.stroke();
+            }
+
+            // Border
+            ctx.strokeStyle = isDark ? '#333' : '#ccc';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(1, 1, w - 2, h - 2);
+
+            // Draw moves
+            if (parsedMoves.length > 0) {
+                // Pending moves (gray)
+                ctx.strokeStyle = isDark ? '#445' : '#ccc';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                for (let i = currentLineIndex; i < parsedMoves.length; i++) {
+                    const move = parsedMoves[i];
+                    if (move.type === 'move') {
+                        ctx.moveTo(move.fromX * scale, h - move.fromY * scale);
+                    } else if (move.type === 'draw') {
+                        ctx.moveTo(move.fromX * scale, h - move.fromY * scale);
+                        ctx.lineTo(move.toX * scale, h - move.toY * scale);
+                    }
+                }
+                ctx.stroke();
+
+                // Completed moves (green)
+                ctx.strokeStyle = isDark ? '#0f0' : '#0a0';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                for (let i = 0; i < currentLineIndex && i < parsedMoves.length; i++) {
+                    const move = parsedMoves[i];
+                    if (move.type === 'draw') {
+                        ctx.moveTo(move.fromX * scale, h - move.fromY * scale);
+                        ctx.lineTo(move.toX * scale, h - move.toY * scale);
+                    }
+                }
+                ctx.stroke();
+
+                // Current position marker
+                if (currentLineIndex > 0 && currentLineIndex <= parsedMoves.length) {
+                    const lastMove = parsedMoves[Math.min(currentLineIndex, parsedMoves.length) - 1];
+                    const px = (lastMove.toX || lastMove.fromX) * scale;
+                    const py = h - (lastMove.toY || lastMove.fromY) * scale;
+                    ctx.fillStyle = '#f00';
+                    ctx.beginPath();
+                    ctx.arc(px, py, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            // Current position from machine
+            const posX = parseFloat(document.getElementById('posX').textContent);
+            const posY = parseFloat(document.getElementById('posY').textContent);
+            if (!isNaN(posX) && !isNaN(posY)) {
+                ctx.fillStyle = '#00f';
+                ctx.beginPath();
+                ctx.arc(posX * scale, h - posY * scale, 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#00f';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(posX * scale, h - posY * scale, 8, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        }
+
+        // Parse G-code for visualization
+        function parseGcode(gcode) {
+            parsedMoves = [];
+            let x = 0, y = 0;
+            let penDown = false;
+
+            const lines = gcode.split('\n');
+            for (const line of lines) {
+                const clean = line.split(';')[0].trim().toUpperCase();
+                if (!clean) continue;
+
+                // Pen control
+                if (clean.includes('M42') && clean.includes('P0')) {
+                    penDown = clean.includes('S1');
+                    continue;
+                }
+
+                // Movement
+                const gMatch = clean.match(/^G[01]\s/);
+                if (gMatch) {
+                    const xMatch = clean.match(/X([-\d.]+)/);
+                    const yMatch = clean.match(/Y([-\d.]+)/);
+
+                    const newX = xMatch ? parseFloat(xMatch[1]) : x;
+                    const newY = yMatch ? parseFloat(yMatch[1]) : y;
+
+                    if (xMatch || yMatch) {
+                        parsedMoves.push({
+                            type: penDown ? 'draw' : 'move',
+                            fromX: x,
+                            fromY: y,
+                            toX: newX,
+                            toY: newY
+                        });
+                        x = newX;
+                        y = newY;
+                    }
+                }
+            }
+
+            currentLineIndex = 0;
+            drawCanvas();
+        }
+
+        // WebSocket
         let ws = null;
         let currentJobId = null;
-        let reconnectTimer = null;
 
-        // WebSocket connection
         function connect() {
             const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${location.host}/ws`;
-
-            log(`Connecting to ${wsUrl}...`);
+            log(`Connecting...`, 'info');
             ws = new WebSocket(wsUrl);
 
             ws.onopen = () => {
-                log('WebSocket connected');
-                document.getElementById('wsStatus').className = 'status-indicator status-connected';
+                log('Connected', 'success');
+                document.getElementById('wsStatus').className = 'status-dot connected';
                 document.getElementById('wsStatusText').textContent = 'Connected';
-
-                // Subscribe to current job if any
                 if (currentJobId) {
                     ws.send(JSON.stringify({ type: 'subscribe', data: { jobId: currentJobId } }));
                 }
             };
 
-            ws.onmessage = (event) => {
-                const msg = JSON.parse(event.data);
-                handleMessage(msg);
-            };
+            ws.onmessage = (e) => handleMessage(JSON.parse(e.data));
 
             ws.onclose = () => {
-                log('WebSocket disconnected');
-                document.getElementById('wsStatus').className = 'status-indicator status-disconnected';
+                document.getElementById('wsStatus').className = 'status-dot disconnected';
                 document.getElementById('wsStatusText').textContent = 'Disconnected';
-
-                // Reconnect after 3 seconds
-                reconnectTimer = setTimeout(connect, 3000);
+                setTimeout(connect, 3000);
             };
 
-            ws.onerror = (err) => {
-                log('WebSocket error');
-            };
+            ws.onerror = () => log('WebSocket error', 'error');
         }
 
-        // Handle incoming WebSocket messages
         function handleMessage(msg) {
             switch (msg.type) {
-                case 'connected':
-                    log(`Connected as ${msg.data.clientId}`);
-                    break;
-
                 case 'position:update':
                     updatePosition(msg.data);
                     break;
-
-                case 'job:created':
-                    log(`Job created: ${msg.data.filename}`);
-                    break;
-
                 case 'job:started':
-                    log(`Job started: ${msg.data.jobId}`);
+                    log('Job started', 'success');
                     document.getElementById('jobStatus').textContent = 'Running';
                     updateButtons('running');
                     break;
-
                 case 'job:progress':
                     updateProgress(msg.data);
                     break;
-
-                case 'job:layer-change':
-                    log(`Layer change: ${msg.data.layerName}`);
-                    highlightLayer(msg.data.layer);
-                    break;
-
                 case 'job:paused':
-                    log('Job paused');
                     document.getElementById('jobStatus').textContent = 'Paused';
                     updateButtons('paused');
                     break;
-
                 case 'job:resumed':
-                    log('Job resumed');
                     document.getElementById('jobStatus').textContent = 'Running';
                     updateButtons('running');
                     break;
-
                 case 'job:completed':
-                    log(`Job completed in ${formatTime(msg.data.elapsedMs)}`);
-                    document.getElementById('jobStatus').textContent = 'Completed';
+                    log(`Completed in ${formatTime(msg.data.elapsedMs)}`, 'success');
+                    document.getElementById('jobStatus').textContent = 'Done';
                     document.getElementById('progressFill').style.width = '100%';
-                    document.getElementById('progressPercent').textContent = '100';
+                    document.getElementById('progressPercent').textContent = '100%';
+                    currentLineIndex = parsedMoves.length;
+                    drawCanvas();
                     updateButtons('completed');
                     break;
-
                 case 'job:error':
-                    log(`Job error: ${msg.data.error}`);
+                    log(`Error: ${msg.data.error}`, 'error');
                     document.getElementById('jobStatus').textContent = 'Error';
                     updateButtons('error');
-                    break;
-
-                case 'machine:status':
-                    document.getElementById('machineStatus').textContent = msg.data.status;
                     break;
             }
         }
 
-        // Update position display
         function updatePosition(pos) {
-            document.getElementById('posX').textContent = pos.x?.toFixed(2) ?? '--';
-            document.getElementById('posY').textContent = pos.y?.toFixed(2) ?? '--';
-            document.getElementById('posZ').textContent = pos.z?.toFixed(2) ?? '--';
+            document.getElementById('posX').textContent = pos.x?.toFixed(1) ?? '--';
+            document.getElementById('posY').textContent = pos.y?.toFixed(1) ?? '--';
+            drawCanvas();
         }
 
-        // Update progress display
         function updateProgress(data) {
             document.getElementById('progressFill').style.width = data.percentage + '%';
-            document.getElementById('progressPercent').textContent = data.percentage;
+            document.getElementById('progressPercent').textContent = data.percentage + '%';
             document.getElementById('currentLine').textContent = data.currentLine;
             document.getElementById('totalLines').textContent = data.totalLines;
             document.getElementById('currentLayer').textContent = data.currentLayer + 1;
             document.getElementById('elapsed').textContent = formatTime(data.elapsedMs);
             document.getElementById('remaining').textContent = formatTime(data.estimatedRemainingMs);
+
+            // Update canvas
+            currentLineIndex = Math.floor(data.currentLine * parsedMoves.length / data.totalLines);
+            drawCanvas();
+
             highlightLayer(data.currentLayer);
         }
 
-        // Highlight current layer
         function highlightLayer(index) {
             document.querySelectorAll('.layer').forEach((el, i) => {
                 el.classList.remove('active', 'completed');
@@ -245,46 +700,31 @@
             });
         }
 
-        // Update button states
         function updateButtons(status) {
-            const pause = document.getElementById('btnPause');
-            const resume = document.getElementById('btnResume');
-            const cancel = document.getElementById('btnCancel');
-            const start = document.getElementById('btnStart');
-
-            pause.disabled = status !== 'running';
-            resume.disabled = status !== 'paused';
-            cancel.disabled = status !== 'running' && status !== 'paused';
-            start.disabled = status === 'running';
+            document.getElementById('btnPause').disabled = status !== 'running';
+            document.getElementById('btnResume').disabled = status !== 'paused';
+            document.getElementById('btnCancel').disabled = status !== 'running' && status !== 'paused';
+            document.getElementById('btnStart').disabled = status === 'running';
         }
 
-        // Format milliseconds to readable time
         function formatTime(ms) {
             if (!ms || ms < 0) return '--';
-            const seconds = Math.floor(ms / 1000);
-            const minutes = Math.floor(seconds / 60);
-            const hours = Math.floor(minutes / 60);
-            if (hours > 0) return `${hours}:${(minutes % 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`;
-            return `${minutes}:${(seconds % 60).toString().padStart(2, '0')}`;
+            const s = Math.floor(ms / 1000);
+            const m = Math.floor(s / 60);
+            return `${m}:${(s % 60).toString().padStart(2, '0')}`;
         }
 
-        // Log message
-        function log(msg) {
-            const logEl = document.getElementById('log');
+        function log(msg, type = '') {
+            const el = document.getElementById('log');
             const time = new Date().toLocaleTimeString();
-            logEl.innerHTML += `[${time}] ${msg}\n`;
-            logEl.scrollTop = logEl.scrollHeight;
+            el.innerHTML += `<div class="${type}">[${time}] ${msg}</div>`;
+            el.scrollTop = el.scrollHeight;
         }
 
-        // API calls
         async function api(method, path, body = null) {
-            const opts = {
-                method,
-                headers: { 'Content-Type': 'application/json' }
-            };
+            const opts = { method, headers: { 'Content-Type': 'application/json' } };
             if (body) opts.body = JSON.stringify(body);
-            const res = await fetch(path, opts);
-            return res.json();
+            return (await fetch(path, opts)).json();
         }
 
         async function getPosition() {
@@ -293,26 +733,24 @@
         }
 
         async function home() {
-            log('Homing...');
+            log('Homing...', 'info');
             await api('POST', '/home');
         }
 
         async function emergencyStop() {
-            if (confirm('EMERGENCY STOP - Are you sure?')) {
-                log('EMERGENCY STOP');
+            if (confirm('EMERGENCY STOP?')) {
+                log('E-STOP', 'error');
                 await api('POST', '/emergency-stop');
             }
         }
 
         async function uploadJob() {
             const fileInput = document.getElementById('fileInput');
-            const filenameInput = document.getElementById('filenameInput');
             const gcodeInput = document.getElementById('gcodeInput');
 
-            let filename = filenameInput.value || 'upload.gcode';
+            let filename = 'upload.gcode';
             let content = gcodeInput.value;
 
-            // Read from file if selected
             if (fileInput.files.length > 0) {
                 const file = fileInput.files[0];
                 filename = file.name;
@@ -320,101 +758,74 @@
             }
 
             if (!content.trim()) {
-                alert('No G-code content');
+                alert('No G-code');
                 return;
             }
 
-            log(`Uploading ${filename}...`);
+            // Parse for preview
+            parseGcode(content);
+
+            log(`Uploading ${filename}...`, 'info');
             const result = await api('POST', '/job/upload', { filename, content });
 
             if (result.success) {
                 currentJobId = result.data.jobId;
-                log(`Job created: ${currentJobId}`);
+                log(`Ready: ${currentJobId.slice(0, 8)}`, 'success');
 
-                // Update UI
                 document.getElementById('jobFilename').textContent = filename;
-                document.getElementById('jobStatus').textContent = 'Pending';
+                document.getElementById('jobStatus').textContent = 'Ready';
                 document.getElementById('totalLines').textContent = result.data.stats.totalLines;
                 document.getElementById('totalLayers').textContent = result.data.layers.length;
-
-                // Stats
                 document.getElementById('statLines').textContent = result.data.stats.totalLines;
                 document.getElementById('statMoves').textContent = result.data.stats.movementCommands;
-                document.getElementById('statShapes').textContent = result.data.stats.shapes || '--';
                 document.getElementById('statTime').textContent = formatTime(result.data.stats.estimatedTimeMs);
 
-                // Layers
                 const layersEl = document.getElementById('layersContainer');
                 layersEl.innerHTML = result.data.layers.map((l, i) =>
-                    `<div class="layer" title="Lines ${l.startLine}-${l.endLine}">${l.name}${l.color ? ` (${l.color})` : ''}</div>`
+                    `<div class="layer">${l.name || 'L' + (i+1)}</div>`
                 ).join('');
 
-                // Subscribe to job updates
-                if (ws && ws.readyState === WebSocket.OPEN) {
+                if (ws?.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ type: 'subscribe', data: { jobId: currentJobId } }));
                 }
 
                 document.getElementById('btnStart').disabled = false;
             } else {
-                log(`Upload failed: ${result.error}`);
+                log(`Failed: ${result.error}`, 'error');
             }
         }
 
         async function startJob() {
             if (!currentJobId) return;
-            log('Starting job...');
+            log('Starting...', 'info');
             const result = await api('POST', `/job/${currentJobId}/start`);
             if (result.success) {
                 document.getElementById('jobStatus').textContent = 'Running';
                 updateButtons('running');
             } else {
-                log(`Start failed: ${result.error}`);
+                log(`Failed: ${result.error}`, 'error');
             }
         }
 
         async function pauseJob() {
-            if (!currentJobId) return;
-            log('Pausing job...');
-            await api('POST', `/job/${currentJobId}/pause`);
+            if (currentJobId) await api('POST', `/job/${currentJobId}/pause`);
         }
 
         async function resumeJob() {
-            if (!currentJobId) return;
-            log('Resuming job...');
-            await api('POST', `/job/${currentJobId}/resume`);
+            if (currentJobId) await api('POST', `/job/${currentJobId}/resume`);
         }
 
         async function cancelJob() {
-            if (!currentJobId) return;
-            if (confirm('Cancel the current job?')) {
-                log('Cancelling job...');
+            if (currentJobId && confirm('Cancel?')) {
                 await api('POST', `/job/${currentJobId}/cancel`);
             }
         }
 
-        // Check for active job on load
-        async function checkActiveJob() {
-            const result = await api('GET', '/job/active');
-            if (result.success && result.data) {
-                currentJobId = result.data.id;
-                document.getElementById('jobFilename').textContent = result.data.filename;
-                document.getElementById('jobStatus').textContent = result.data.status;
-                updateProgress(result.data.progress);
-                updateButtons(result.data.status);
-
-                // Subscribe
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ type: 'subscribe', data: { jobId: currentJobId } }));
-                }
-            }
-        }
-
-        // Initialize
+        // Init
+        loadTheme();
+        initCanvas();
         connect();
         getPosition();
-        setTimeout(checkActiveJob, 1000);
-
-        // Poll position every 5 seconds as fallback
         setInterval(getPosition, 5000);
     </script>
 </body>
