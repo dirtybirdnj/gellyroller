@@ -429,6 +429,15 @@
         let parsedMoves = [];
         let currentLineIndex = 0;
 
+        // Animation state
+        let animationId = null;
+        let animatedPos = { x: 200, y: 200 };
+        let targetPos = { x: 200, y: 200 };
+        let moveStartTime = 0;
+        let moveDuration = 0;
+        let moveStartPos = { x: 200, y: 200 };
+        let currentFeedRate = 2000; // mm/min default
+
         // Theme
         function toggleTheme() {
             const current = document.documentElement.getAttribute('data-theme');
@@ -542,27 +551,52 @@
                 }
             }
 
-            // Current position from machine
-            const posX = parseFloat(document.getElementById('posX').textContent);
-            const posY = parseFloat(document.getElementById('posY').textContent);
-            if (!isNaN(posX) && !isNaN(posY)) {
+            // Animated current position from machine
+            if (animatedPos.x != null && animatedPos.y != null) {
+                const px = animatedPos.x * scale;
+                const py = h - animatedPos.y * scale;
+
+                // Draw trail effect (fading circles)
+                ctx.fillStyle = 'rgba(0, 100, 255, 0.2)';
+                ctx.beginPath();
+                ctx.arc(px, py, 12, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Main position dot
                 ctx.fillStyle = '#00f';
                 ctx.beginPath();
-                ctx.arc(posX * scale, h - posY * scale, 5, 0, Math.PI * 2);
+                ctx.arc(px, py, 5, 0, Math.PI * 2);
                 ctx.fill();
+
+                // Outer ring
                 ctx.strokeStyle = '#00f';
                 ctx.lineWidth = 2;
                 ctx.beginPath();
-                ctx.arc(posX * scale, h - posY * scale, 8, 0, Math.PI * 2);
+                ctx.arc(px, py, 8, 0, Math.PI * 2);
                 ctx.stroke();
+
+                // Direction indicator (if moving)
+                if (animationId && targetPos.x !== animatedPos.x || targetPos.y !== animatedPos.y) {
+                    const tx = targetPos.x * scale;
+                    const ty = h - targetPos.y * scale;
+                    ctx.strokeStyle = 'rgba(0, 100, 255, 0.5)';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([4, 4]);
+                    ctx.beginPath();
+                    ctx.moveTo(px, py);
+                    ctx.lineTo(tx, ty);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
             }
         }
 
-        // Parse G-code for visualization
+        // Parse G-code for visualization with timing
         function parseGcode(gcode) {
             parsedMoves = [];
             let x = 0, y = 0;
             let penDown = false;
+            let feedRate = 2000; // Default mm/min
 
             const lines = gcode.split('\n');
             for (const line of lines) {
@@ -576,21 +610,36 @@
                 }
 
                 // Movement
-                const gMatch = clean.match(/^G[01]\s/);
+                const gMatch = clean.match(/^G([01])\s/);
                 if (gMatch) {
+                    const isRapid = gMatch[1] === '0';
                     const xMatch = clean.match(/X([-\d.]+)/);
                     const yMatch = clean.match(/Y([-\d.]+)/);
+                    const fMatch = clean.match(/F([\d.]+)/);
+
+                    if (fMatch) feedRate = parseFloat(fMatch[1]);
 
                     const newX = xMatch ? parseFloat(xMatch[1]) : x;
                     const newY = yMatch ? parseFloat(yMatch[1]) : y;
 
                     if (xMatch || yMatch) {
+                        // Calculate distance and duration
+                        const dx = newX - x;
+                        const dy = newY - y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        // Rapid moves (G0) use max speed, G1 uses feed rate
+                        const effectiveFeedRate = isRapid ? 6000 : feedRate;
+                        const durationMs = (distance / effectiveFeedRate) * 60 * 1000;
+
                         parsedMoves.push({
                             type: penDown ? 'draw' : 'move',
                             fromX: x,
                             fromY: y,
                             toX: newX,
-                            toY: newY
+                            toY: newY,
+                            feedRate: effectiveFeedRate,
+                            distance: distance,
+                            durationMs: durationMs
                         });
                         x = newX;
                         y = newY;
@@ -673,7 +722,50 @@
         function updatePosition(pos) {
             document.getElementById('posX').textContent = pos.x?.toFixed(1) ?? '--';
             document.getElementById('posY').textContent = pos.y?.toFixed(1) ?? '--';
+
+            // Calculate distance to new position
+            const dx = pos.x - animatedPos.x;
+            const dy = pos.y - animatedPos.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance > 0.5) {
+                // Start animated move
+                moveStartPos = { ...animatedPos };
+                targetPos = { x: pos.x, y: pos.y };
+                moveStartTime = performance.now();
+                // Estimate duration based on distance and typical feed rate
+                moveDuration = (distance / currentFeedRate) * 60 * 1000;
+                // Minimum 50ms, maximum 2000ms for smooth animation
+                moveDuration = Math.max(50, Math.min(moveDuration, 2000));
+
+                if (!animationId) {
+                    animationId = requestAnimationFrame(animatePosition);
+                }
+            } else {
+                animatedPos = { x: pos.x, y: pos.y };
+                drawCanvas();
+            }
+        }
+
+        function animatePosition(timestamp) {
+            const elapsed = timestamp - moveStartTime;
+            const progress = Math.min(elapsed / moveDuration, 1);
+
+            // Ease-out for smooth deceleration
+            const eased = 1 - Math.pow(1 - progress, 2);
+
+            animatedPos.x = moveStartPos.x + (targetPos.x - moveStartPos.x) * eased;
+            animatedPos.y = moveStartPos.y + (targetPos.y - moveStartPos.y) * eased;
+
             drawCanvas();
+
+            if (progress < 1) {
+                animationId = requestAnimationFrame(animatePosition);
+            } else {
+                animatedPos = { ...targetPos };
+                animationId = null;
+                drawCanvas();
+            }
         }
 
         function updateProgress(data) {
@@ -685,8 +777,15 @@
             document.getElementById('elapsed').textContent = formatTime(data.elapsedMs);
             document.getElementById('remaining').textContent = formatTime(data.estimatedRemainingMs);
 
-            // Update canvas
-            currentLineIndex = Math.floor(data.currentLine * parsedMoves.length / data.totalLines);
+            // Update canvas progress
+            const newLineIndex = Math.floor(data.currentLine * parsedMoves.length / data.totalLines);
+
+            // Update current feed rate from parsed moves for accurate animation
+            if (newLineIndex < parsedMoves.length && parsedMoves[newLineIndex]) {
+                currentFeedRate = parsedMoves[newLineIndex].feedRate || 2000;
+            }
+
+            currentLineIndex = newLineIndex;
             drawCanvas();
 
             highlightLayer(data.currentLayer);
