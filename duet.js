@@ -28,8 +28,9 @@ class Duet extends EventEmitter {
     // State tracking
     this.state = {
       position: { x: 0, y: 0, z: 0, e: 0 },
-      status: 'idle',
-      lastUpdate: null
+      status: 'idle',  // idle, busy, paused, error
+      lastUpdate: null,
+      pausedAt: null
     };
     
     // Command queue
@@ -284,11 +285,26 @@ class Duet extends EventEmitter {
   }
   
   async pause() {
-    return await this.sendGCode('M25');
+    const response = await this.sendGCode('M25');
+    this.state.status = 'paused';
+    this.state.pausedAt = new Date();
+    this.emit('paused');
+    return response;
   }
-  
+
+  async resume() {
+    const response = await this.sendGCode('M24');
+    this.state.status = 'busy';
+    this.state.pausedAt = null;
+    this.emit('resumed');
+    return response;
+  }
+
   async stop() {
-    return await this.sendGCode('M0');
+    const response = await this.sendGCode('M0');
+    this.state.status = 'idle';
+    this.emit('stopped');
+    return response;
   }
   
   async emergencyStop() {

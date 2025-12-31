@@ -7,6 +7,8 @@ import express from 'express';
 import Duet from './duet.js';
 import System from './system.js';
 import Webcam from './webcam.js';
+import WSServer from './websocket-server.js';
+import JobManager from './job-manager.js';
 import { initializeRoutes } from './routes.js';
 
 const app = express();
@@ -24,6 +26,9 @@ const config = {
 
 // Middleware
 app.use(express.json());
+
+// Serve static HTML files
+app.use(express.static('.'));
 
 // Initialize Duet controller ONCE - this is the persistent connection
 const duet = new Duet({
@@ -63,11 +68,26 @@ duet.on('position', (position) => {
   console.log('Position updated:', position);
 });
 
-// Initialize and mount routes - passes the SAME duet instance to all routes
-const routes = initializeRoutes(duet, system, webcam);
+// Create HTTP server first (needed for WebSocket)
+const server = app.listen(PORT, () => {
+  console.log(`Gellyroller API running on http://localhost:${PORT}`);
+  console.log(`Mode: ${DEV_MODE ? 'DEVELOPMENT (Simulated)' : 'PRODUCTION'}`);
+  console.log(`WebSocket: ws://localhost:${PORT}/ws`);
+  console.log(`Serial Path: ${SERIAL_PATH}`);
+});
+
+// Initialize WebSocket server (attached to HTTP server)
+const wsServer = new WSServer(server, { devMode: DEV_MODE });
+wsServer.startHeartbeat();
+
+// Initialize Job Manager (connects duet, parser, and websocket)
+const jobManager = new JobManager(duet, wsServer, { devMode: DEV_MODE });
+
+// Initialize and mount routes (with all dependencies)
+const routes = initializeRoutes(duet, system, webcam, jobManager);
 app.use('/', routes);
 
-// 404 handler
+// 404 handler (must be after routes)
 app.use((req, res) => {
   res.status(404).json({ success: false, error: 'Route not found' });
 });
@@ -78,17 +98,40 @@ app.use((err, req, res, next) => {
   res.status(500).json({ success: false, error: 'Internal server error' });
 });
 
-// Graceful shutdown - ONLY time we close the serial port
+// Log available endpoints
+console.log('Endpoints:');
+console.log('  Machine: /position, /state, /status, /home, /goto/*, /pause, /cancel');
+console.log('  G-code:  /gcode, /execute, /sd/*');
+console.log('  Jobs:    /job/upload, /job/list, /job/:id, /job/:id/start|pause|resume|cancel');
+console.log('  Webcam:  /webcam/photo, /webcam/config, /webcam/images, /webcam/test');
+console.log('  System:  /system/shutdown, /system/restart, /system/uptime');
+console.log('  Health:  /health');
+
+// Handle uncaught errors
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+// Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\nShutting down gracefully...');
-  
+
   try {
-    // Close Duet connection cleanly
-    duet.close();   
-    
-    // Close server
+    // Close WebSocket server
+    wsServer.close();
+    console.log('WebSocket server closed');
+
+    // Close Duet connection
+    duet.close();
+    console.log('Duet connection closed');
+
+    // Close HTTP server
     server.close(() => {
-      console.log('Server closed');
+      console.log('HTTP server closed');
       process.exit(0);
     });
   } catch (error) {
@@ -97,51 +140,4 @@ process.on('SIGINT', async () => {
   }
 });
 
-// Handle uncaught errors
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
-  // Don't close the serial port on error, just log it
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  // Don't close the serial port on error, just log it
-});
-
-// Initialize and start
-const server = app.listen(PORT, () => {
-  console.log(`Duet Controller API running on http://localhost:${PORT}`);
-  console.log(`Mode: ${DEV_MODE ? 'DEVELOPMENT (Simulated)' : 'PRODUCTION'}`);
-  console.log(`Serial Path: ${SERIAL_PATH}`);
-  console.log(`Duet Status: ${duet.isReady() ? 'Ready' : 'Initializing...'}`);
-  console.log('Available endpoints:');
-  console.log('  GET  /position - Get current position');
-  console.log('  GET  /state - Get full Duet state');
-  console.log('  GET  /status - Get status summary');
-  console.log('  GET  /config - Get machine configuration');
-  console.log('  PUT  /config - Update machine configuration');
-  console.log('  GET  /sd/files - List SD card files');
-  console.log('  GET  /sd/info - SD card information');
-  console.log('  POST /sd/upload - Upload file to SD card');
-  console.log('  POST /execute - Execute G-code file');
-  console.log('  POST /pause - Pause operation');
-  console.log('  POST /cancel - Cancel operation');
-  console.log('  POST /emergency-stop - Emergency stop');
-  console.log('  POST /home - Home all axes');
-  console.log('  POST /goto/fast - Rapid move');
-  console.log('  POST /goto/slow - Controlled move');
-  console.log('  POST /gpio/send - Set GPIO pin');
-  console.log('  GET  /gpio/read - Read GPIO pin');
-  console.log('  POST /gcode - Send raw G-code');
-  console.log('  POST /system/shutdown - Schedule system shutdown');
-  console.log('  POST /system/shutdown/cancel - Cancel scheduled shutdown');
-  console.log('  POST /system/restart - Restart Raspberry Pi');
-  console.log('  GET  /system/uptime - Get system uptime');
-  console.log('  POST /webcam/photo - Capture photo');
-  console.log('  GET  /webcam/config - Get webcam configuration');
-  console.log('  GET  /webcam/images - List captured images');
-  console.log('  DELETE /webcam/images/:filename - Delete image');
-  console.log('  GET  /webcam/test - Test webcam');  
-});
-
-export { app, server, duet, system, webcam };
+export { app, server, duet, system, webcam, wsServer, jobManager };

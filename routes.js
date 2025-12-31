@@ -4,15 +4,17 @@ import express from 'express';
 
 const router = express.Router();
 
-// Routes will be initialized with duet and system instances
+// Routes will be initialized with duet, system, webcam, and jobManager instances
 let duet;
 let system;
 let webcam;
+let jobManager;
 
-export function initializeRoutes(duetInstance, systemInstance, webcamInstance) {
+export function initializeRoutes(duetInstance, systemInstance, webcamInstance, jobManagerInstance) {
   duet = duetInstance;
   system = systemInstance;
   webcam = webcamInstance;
+  jobManager = jobManagerInstance;
   return router;
 }
 
@@ -179,8 +181,8 @@ router.get('/state', (req, res) => {
 router.get('/status', (req, res) => {
   try {
     const state = duet.getState();
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       data: {
         status: state.status,
         ready: duet.isReady(),
@@ -231,15 +233,17 @@ router.post('/gcode', async (req, res) => {
 
 // Health check
 router.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
+  res.json({
+    status: 'ok',
     duetReady: duet.isReady(),
     devMode: process.env.DEV_MODE === 'true',
-    timestamp: new Date().toISOString() 
+    timestamp: new Date().toISOString()
   });
 });
 
+// ============================================
 // System Management Routes
+// ============================================
 
 // Schedule system shutdown
 router.post('/system/shutdown', async (req, res) => {
@@ -282,7 +286,9 @@ router.get('/system/uptime', async (req, res) => {
   }
 });
 
+// ============================================
 // Webcam Routes
+// ============================================
 
 // Capture photo
 router.post('/webcam/photo', async (req, res) => {
@@ -331,6 +337,196 @@ router.get('/webcam/test', async (req, res) => {
   try {
     const result = await webcam.testWebcam();
     res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================
+// Job Management Routes
+// ============================================
+
+// Upload G-code and create a job
+router.post('/job/upload', (req, res) => {
+  try {
+    const { filename, content } = req.body;
+    if (!filename || !content) {
+      return res.status(400).json({ success: false, error: 'Filename and content required' });
+    }
+    const job = jobManager.createJob(filename, content);
+    res.json({
+      success: true,
+      data: {
+        jobId: job.id,
+        filename: job.filename,
+        stats: job.stats,
+        layers: job.layers,
+        toolChanges: job.toolChanges
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// List all jobs
+router.get('/job/list', (req, res) => {
+  try {
+    const jobs = jobManager.listJobs();
+    res.json({ success: true, data: jobs });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get active job
+router.get('/job/active', (req, res) => {
+  try {
+    const job = jobManager.getActiveJob();
+    if (!job) {
+      return res.json({ success: true, data: null });
+    }
+    res.json({
+      success: true,
+      data: {
+        id: job.id,
+        filename: job.filename,
+        status: job.status,
+        progress: job.progress
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get job details
+router.get('/job/:id', (req, res) => {
+  try {
+    const job = jobManager.getJob(req.params.id);
+    if (!job) {
+      return res.status(404).json({ success: false, error: 'Job not found' });
+    }
+    res.json({
+      success: true,
+      data: {
+        id: job.id,
+        filename: job.filename,
+        status: job.status,
+        createdAt: job.createdAt,
+        startedAt: job.startedAt,
+        completedAt: job.completedAt,
+        stats: job.stats,
+        layers: job.layers,
+        toolChanges: job.toolChanges,
+        progress: job.progress,
+        error: job.error
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delete a job
+router.delete('/job/:id', (req, res) => {
+  try {
+    jobManager.deleteJob(req.params.id);
+    res.json({ success: true, data: { deleted: req.params.id } });
+  } catch (error) {
+    if (error.message.includes('not found')) {
+      return res.status(404).json({ success: false, error: error.message });
+    }
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Start a job
+router.post('/job/:id/start', async (req, res) => {
+  try {
+    const job = await jobManager.startJob(req.params.id);
+    res.json({
+      success: true,
+      data: {
+        jobId: job.id,
+        status: job.status,
+        startedAt: job.startedAt
+      }
+    });
+  } catch (error) {
+    if (error.message.includes('not found')) {
+      return res.status(404).json({ success: false, error: error.message });
+    }
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Pause a job
+router.post('/job/:id/pause', async (req, res) => {
+  try {
+    const job = await jobManager.pauseJob(req.params.id);
+    res.json({
+      success: true,
+      data: {
+        jobId: job.id,
+        status: job.status,
+        progress: job.progress
+      }
+    });
+  } catch (error) {
+    if (error.message.includes('not found')) {
+      return res.status(404).json({ success: false, error: error.message });
+    }
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Resume a job
+router.post('/job/:id/resume', async (req, res) => {
+  try {
+    const job = await jobManager.resumeJob(req.params.id);
+    res.json({
+      success: true,
+      data: {
+        jobId: job.id,
+        status: job.status
+      }
+    });
+  } catch (error) {
+    if (error.message.includes('not found')) {
+      return res.status(404).json({ success: false, error: error.message });
+    }
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Cancel a job
+router.post('/job/:id/cancel', async (req, res) => {
+  try {
+    const job = await jobManager.cancelJob(req.params.id);
+    res.json({
+      success: true,
+      data: {
+        jobId: job.id,
+        status: job.status
+      }
+    });
+  } catch (error) {
+    if (error.message.includes('not found')) {
+      return res.status(404).json({ success: false, error: error.message });
+    }
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get job progress (REST fallback for polling)
+router.get('/job/:id/progress', (req, res) => {
+  try {
+    const progress = jobManager.getJobProgress(req.params.id);
+    if (!progress) {
+      return res.status(404).json({ success: false, error: 'Job not found' });
+    }
+    res.json({ success: true, data: progress });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

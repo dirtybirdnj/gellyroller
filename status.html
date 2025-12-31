@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gellyroller Status</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: monospace; padding: 20px; max-width: 900px; margin: 0 auto; }
+        h1 { margin-bottom: 10px; }
+        h2 { margin: 20px 0 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .panel { border: 1px solid #ccc; padding: 15px; }
+        .status-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
+        .status-connected { background: #0a0; }
+        .status-disconnected { background: #a00; }
+        .progress-bar { width: 100%; height: 24px; background: #eee; margin: 10px 0; }
+        .progress-fill { height: 100%; background: #4a4; transition: width 0.3s; }
+        .layers { display: flex; gap: 5px; flex-wrap: wrap; margin: 10px 0; }
+        .layer { padding: 5px 10px; border: 1px solid #999; font-size: 12px; }
+        .layer.active { background: #ff0; font-weight: bold; }
+        .layer.completed { background: #cfc; }
+        button { padding: 8px 16px; margin: 5px 5px 5px 0; cursor: pointer; }
+        button.danger { background: #c00; color: white; border: none; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        textarea { width: 100%; font-family: monospace; }
+        input[type="file"], input[type="text"] { margin: 5px 0; }
+        .stats { font-size: 14px; }
+        .stats dt { font-weight: bold; float: left; width: 120px; }
+        .stats dd { margin-left: 130px; margin-bottom: 5px; }
+        #log { height: 150px; overflow-y: auto; background: #f5f5f5; padding: 10px; font-size: 12px; }
+        .position { font-size: 18px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Gellyroller Status</h1>
+    <p>
+        <span id="wsStatus" class="status-indicator status-disconnected"></span>
+        <span id="wsStatusText">Disconnected</span>
+    </p>
+
+    <div class="grid">
+        <div class="panel">
+            <h2>Machine</h2>
+            <p class="position">
+                X: <span id="posX">--</span>
+                Y: <span id="posY">--</span>
+                Z: <span id="posZ">--</span>
+            </p>
+            <p>Status: <strong id="machineStatus">--</strong></p>
+            <div style="margin-top: 15px;">
+                <button onclick="home()">Home</button>
+                <button onclick="getPosition()">Refresh Position</button>
+                <button class="danger" onclick="emergencyStop()">EMERGENCY STOP</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Current Job</h2>
+            <p><strong id="jobFilename">No job loaded</strong></p>
+            <p>Status: <span id="jobStatus">--</span></p>
+            <div class="progress-bar">
+                <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+            </div>
+            <p>
+                <span id="progressPercent">0</span>% complete
+                (<span id="currentLine">0</span> / <span id="totalLines">0</span> lines)
+            </p>
+            <p>
+                Layer: <span id="currentLayer">0</span> / <span id="totalLayers">0</span>
+            </p>
+            <p>
+                Elapsed: <span id="elapsed">--</span> |
+                Remaining: <span id="remaining">--</span>
+            </p>
+            <div style="margin-top: 15px;">
+                <button id="btnPause" onclick="pauseJob()" disabled>Pause</button>
+                <button id="btnResume" onclick="resumeJob()" disabled>Resume</button>
+                <button id="btnCancel" onclick="cancelJob()" disabled>Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <h2>Layers</h2>
+    <div id="layersContainer" class="layers">
+        <em>No layers loaded</em>
+    </div>
+
+    <h2>Upload G-code</h2>
+    <div class="panel">
+        <p>
+            <input type="file" id="fileInput" accept=".gcode,.g,.nc">
+            <span>or</span>
+            <input type="text" id="filenameInput" placeholder="filename.gcode" style="width: 200px;">
+        </p>
+        <textarea id="gcodeInput" rows="8" placeholder="Paste G-code here..."></textarea>
+        <p>
+            <button onclick="uploadJob()">Upload</button>
+            <button id="btnStart" onclick="startJob()" disabled>Start Job</button>
+        </p>
+    </div>
+
+    <h2>Job Stats</h2>
+    <dl id="statsContainer" class="stats">
+        <dt>Total Lines:</dt><dd id="statLines">--</dd>
+        <dt>Movements:</dt><dd id="statMoves">--</dd>
+        <dt>Shapes:</dt><dd id="statShapes">--</dd>
+        <dt>Est. Time:</dt><dd id="statTime">--</dd>
+    </dl>
+
+    <h2>Log</h2>
+    <div id="log"></div>
+
+    <script>
+        // State
+        let ws = null;
+        let currentJobId = null;
+        let reconnectTimer = null;
+
+        // WebSocket connection
+        function connect() {
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${location.host}/ws`;
+
+            log(`Connecting to ${wsUrl}...`);
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                log('WebSocket connected');
+                document.getElementById('wsStatus').className = 'status-indicator status-connected';
+                document.getElementById('wsStatusText').textContent = 'Connected';
+
+                // Subscribe to current job if any
+                if (currentJobId) {
+                    ws.send(JSON.stringify({ type: 'subscribe', data: { jobId: currentJobId } }));
+                }
+            };
+
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                handleMessage(msg);
+            };
+
+            ws.onclose = () => {
+                log('WebSocket disconnected');
+                document.getElementById('wsStatus').className = 'status-indicator status-disconnected';
+                document.getElementById('wsStatusText').textContent = 'Disconnected';
+
+                // Reconnect after 3 seconds
+                reconnectTimer = setTimeout(connect, 3000);
+            };
+
+            ws.onerror = (err) => {
+                log('WebSocket error');
+            };
+        }
+
+        // Handle incoming WebSocket messages
+        function handleMessage(msg) {
+            switch (msg.type) {
+                case 'connected':
+                    log(`Connected as ${msg.data.clientId}`);
+                    break;
+
+                case 'position:update':
+                    updatePosition(msg.data);
+                    break;
+
+                case 'job:created':
+                    log(`Job created: ${msg.data.filename}`);
+                    break;
+
+                case 'job:started':
+                    log(`Job started: ${msg.data.jobId}`);
+                    document.getElementById('jobStatus').textContent = 'Running';
+                    updateButtons('running');
+                    break;
+
+                case 'job:progress':
+                    updateProgress(msg.data);
+                    break;
+
+                case 'job:layer-change':
+                    log(`Layer change: ${msg.data.layerName}`);
+                    highlightLayer(msg.data.layer);
+                    break;
+
+                case 'job:paused':
+                    log('Job paused');
+                    document.getElementById('jobStatus').textContent = 'Paused';
+                    updateButtons('paused');
+                    break;
+
+                case 'job:resumed':
+                    log('Job resumed');
+                    document.getElementById('jobStatus').textContent = 'Running';
+                    updateButtons('running');
+                    break;
+
+                case 'job:completed':
+                    log(`Job completed in ${formatTime(msg.data.elapsedMs)}`);
+                    document.getElementById('jobStatus').textContent = 'Completed';
+                    document.getElementById('progressFill').style.width = '100%';
+                    document.getElementById('progressPercent').textContent = '100';
+                    updateButtons('completed');
+                    break;
+
+                case 'job:error':
+                    log(`Job error: ${msg.data.error}`);
+                    document.getElementById('jobStatus').textContent = 'Error';
+                    updateButtons('error');
+                    break;
+
+                case 'machine:status':
+                    document.getElementById('machineStatus').textContent = msg.data.status;
+                    break;
+            }
+        }
+
+        // Update position display
+        function updatePosition(pos) {
+            document.getElementById('posX').textContent = pos.x?.toFixed(2) ?? '--';
+            document.getElementById('posY').textContent = pos.y?.toFixed(2) ?? '--';
+            document.getElementById('posZ').textContent = pos.z?.toFixed(2) ?? '--';
+        }
+
+        // Update progress display
+        function updateProgress(data) {
+            document.getElementById('progressFill').style.width = data.percentage + '%';
+            document.getElementById('progressPercent').textContent = data.percentage;
+            document.getElementById('currentLine').textContent = data.currentLine;
+            document.getElementById('totalLines').textContent = data.totalLines;
+            document.getElementById('currentLayer').textContent = data.currentLayer + 1;
+            document.getElementById('elapsed').textContent = formatTime(data.elapsedMs);
+            document.getElementById('remaining').textContent = formatTime(data.estimatedRemainingMs);
+            highlightLayer(data.currentLayer);
+        }
+
+        // Highlight current layer
+        function highlightLayer(index) {
+            document.querySelectorAll('.layer').forEach((el, i) => {
+                el.classList.remove('active', 'completed');
+                if (i === index) el.classList.add('active');
+                else if (i < index) el.classList.add('completed');
+            });
+        }
+
+        // Update button states
+        function updateButtons(status) {
+            const pause = document.getElementById('btnPause');
+            const resume = document.getElementById('btnResume');
+            const cancel = document.getElementById('btnCancel');
+            const start = document.getElementById('btnStart');
+
+            pause.disabled = status !== 'running';
+            resume.disabled = status !== 'paused';
+            cancel.disabled = status !== 'running' && status !== 'paused';
+            start.disabled = status === 'running';
+        }
+
+        // Format milliseconds to readable time
+        function formatTime(ms) {
+            if (!ms || ms < 0) return '--';
+            const seconds = Math.floor(ms / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            if (hours > 0) return `${hours}:${(minutes % 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`;
+            return `${minutes}:${(seconds % 60).toString().padStart(2, '0')}`;
+        }
+
+        // Log message
+        function log(msg) {
+            const logEl = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            logEl.innerHTML += `[${time}] ${msg}\n`;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        // API calls
+        async function api(method, path, body = null) {
+            const opts = {
+                method,
+                headers: { 'Content-Type': 'application/json' }
+            };
+            if (body) opts.body = JSON.stringify(body);
+            const res = await fetch(path, opts);
+            return res.json();
+        }
+
+        async function getPosition() {
+            const result = await api('GET', '/position');
+            if (result.success) updatePosition(result.data);
+        }
+
+        async function home() {
+            log('Homing...');
+            await api('POST', '/home');
+        }
+
+        async function emergencyStop() {
+            if (confirm('EMERGENCY STOP - Are you sure?')) {
+                log('EMERGENCY STOP');
+                await api('POST', '/emergency-stop');
+            }
+        }
+
+        async function uploadJob() {
+            const fileInput = document.getElementById('fileInput');
+            const filenameInput = document.getElementById('filenameInput');
+            const gcodeInput = document.getElementById('gcodeInput');
+
+            let filename = filenameInput.value || 'upload.gcode';
+            let content = gcodeInput.value;
+
+            // Read from file if selected
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                filename = file.name;
+                content = await file.text();
+            }
+
+            if (!content.trim()) {
+                alert('No G-code content');
+                return;
+            }
+
+            log(`Uploading ${filename}...`);
+            const result = await api('POST', '/job/upload', { filename, content });
+
+            if (result.success) {
+                currentJobId = result.data.jobId;
+                log(`Job created: ${currentJobId}`);
+
+                // Update UI
+                document.getElementById('jobFilename').textContent = filename;
+                document.getElementById('jobStatus').textContent = 'Pending';
+                document.getElementById('totalLines').textContent = result.data.stats.totalLines;
+                document.getElementById('totalLayers').textContent = result.data.layers.length;
+
+                // Stats
+                document.getElementById('statLines').textContent = result.data.stats.totalLines;
+                document.getElementById('statMoves').textContent = result.data.stats.movementCommands;
+                document.getElementById('statShapes').textContent = result.data.stats.shapes || '--';
+                document.getElementById('statTime').textContent = formatTime(result.data.stats.estimatedTimeMs);
+
+                // Layers
+                const layersEl = document.getElementById('layersContainer');
+                layersEl.innerHTML = result.data.layers.map((l, i) =>
+                    `<div class="layer" title="Lines ${l.startLine}-${l.endLine}">${l.name}${l.color ? ` (${l.color})` : ''}</div>`
+                ).join('');
+
+                // Subscribe to job updates
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'subscribe', data: { jobId: currentJobId } }));
+                }
+
+                document.getElementById('btnStart').disabled = false;
+            } else {
+                log(`Upload failed: ${result.error}`);
+            }
+        }
+
+        async function startJob() {
+            if (!currentJobId) return;
+            log('Starting job...');
+            const result = await api('POST', `/job/${currentJobId}/start`);
+            if (result.success) {
+                document.getElementById('jobStatus').textContent = 'Running';
+                updateButtons('running');
+            } else {
+                log(`Start failed: ${result.error}`);
+            }
+        }
+
+        async function pauseJob() {
+            if (!currentJobId) return;
+            log('Pausing job...');
+            await api('POST', `/job/${currentJobId}/pause`);
+        }
+
+        async function resumeJob() {
+            if (!currentJobId) return;
+            log('Resuming job...');
+            await api('POST', `/job/${currentJobId}/resume`);
+        }
+
+        async function cancelJob() {
+            if (!currentJobId) return;
+            if (confirm('Cancel the current job?')) {
+                log('Cancelling job...');
+                await api('POST', `/job/${currentJobId}/cancel`);
+            }
+        }
+
+        // Check for active job on load
+        async function checkActiveJob() {
+            const result = await api('GET', '/job/active');
+            if (result.success && result.data) {
+                currentJobId = result.data.id;
+                document.getElementById('jobFilename').textContent = result.data.filename;
+                document.getElementById('jobStatus').textContent = result.data.status;
+                updateProgress(result.data.progress);
+                updateButtons(result.data.status);
+
+                // Subscribe
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'subscribe', data: { jobId: currentJobId } }));
+                }
+            }
+        }
+
+        // Initialize
+        connect();
+        getPosition();
+        setTimeout(checkActiveJob, 1000);
+
+        // Poll position every 5 seconds as fallback
+        setInterval(getPosition, 5000);
+    </script>
+</body>
+</html>
