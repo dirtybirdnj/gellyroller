@@ -4,12 +4,17 @@
 
 import 'dotenv/config';
 import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import Duet from './duet.js';
 import System from './system.js';
 import Webcam from './webcam.js';
 import WSServer from './websocket-server.js';
 import JobManager from './job-manager.js';
 import { initializeRoutes } from './routes.js';
+import { createApiRoutes } from './api-routes.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -24,11 +29,14 @@ const config = {
   }
 };
 
-// Middleware
-app.use(express.json());
+// Middleware - increase JSON limit for SVG uploads
+app.use(express.json({ limit: '10mb' }));
 
-// Serve static HTML files
-app.use(express.static('.'));
+// Serve static HTML files from public directory
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Also serve from root for legacy compatibility
+app.use(express.static(__dirname));
 
 // Initialize Duet controller ONCE - this is the persistent connection
 const duet = new Duet({
@@ -118,6 +126,10 @@ if (duet.ready) {
 // Initialize and mount routes (with all dependencies)
 const routes = initializeRoutes(duet, system, webcam, jobManager);
 app.use('/', routes);
+
+// Mount API routes for new UI
+const apiRoutes = createApiRoutes(jobManager);
+app.use('/api', apiRoutes);
 
 // 404 handler (must be after routes)
 app.use((req, res) => {

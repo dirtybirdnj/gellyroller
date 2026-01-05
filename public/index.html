@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gellyroller - Status</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: monospace;
+      background: #111;
+      color: #eee;
+      padding: 20px;
+      min-height: 100vh;
+    }
+    h1 { font-size: 24px; margin-bottom: 20px; }
+
+    .status-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #c00;
+    }
+    .status-dot.connected { background: #0c0; }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 15px;
+      margin-bottom: 30px;
+      max-width: 660px;
+    }
+    .info-box {
+      background: #222;
+      padding: 15px;
+      border-radius: 4px;
+    }
+    .info-box label {
+      font-size: 11px;
+      color: #888;
+      display: block;
+      margin-bottom: 5px;
+    }
+    .info-box .value {
+      font-size: 20px;
+      color: #0f0;
+    }
+    .info-box .value.warning { color: #f90; }
+    .info-box .value.ok { color: #0f0; }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 30px;
+    }
+    button {
+      font-family: monospace;
+      font-size: 14px;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      background: #333;
+      color: #eee;
+    }
+    button:hover, button:focus { background: #444; outline: 2px solid #0f0; }
+    button.primary { background: #060; }
+    button.primary:hover, button.primary:focus { background: #080; }
+    button.danger { background: #600; }
+    button.danger:hover, button.danger:focus { background: #800; }
+
+    nav {
+      border-top: 1px solid #333;
+      padding-top: 20px;
+    }
+    nav a {
+      display: inline-block;
+      color: #0f0;
+      text-decoration: none;
+      padding: 10px 20px;
+      margin-right: 10px;
+      background: #222;
+      border-radius: 4px;
+    }
+    nav a:hover, nav a:focus { background: #333; outline: 2px solid #0f0; }
+
+    .job-banner {
+      display: none;
+      background: #330;
+      padding: 15px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    .job-banner.active { display: block; }
+    .job-banner a { color: #ff0; }
+  </style>
+</head>
+<body>
+  <h1>Gellyroller</h1>
+
+  <div class="status-row">
+    <div id="statusDot" class="status-dot"></div>
+    <span id="statusText">Connecting...</span>
+  </div>
+
+  <div id="jobBanner" class="job-banner">
+    Job in progress: <span id="jobName">--</span>
+    <a href="job.html">View Job</a>
+  </div>
+
+  <div class="info-grid">
+    <div class="info-box">
+      <label>X</label>
+      <div class="value" id="posX">--</div>
+    </div>
+    <div class="info-box">
+      <label>Y</label>
+      <div class="value" id="posY">--</div>
+    </div>
+    <div class="info-box">
+      <label>Homed</label>
+      <div class="value warning" id="homedStatus">No</div>
+    </div>
+    <div class="info-box">
+      <label>Pen</label>
+      <div class="value" id="penStatus">--</div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="primary" onclick="home()">Home</button>
+    <button onclick="penUp()">Pen Up</button>
+    <button onclick="penDown()">Pen Down</button>
+    <button class="danger" onclick="estop()">E-Stop</button>
+  </div>
+
+  <nav>
+    <a href="files.html">Files</a>
+  </nav>
+
+  <script>
+    let ws;
+    let penState = null; // null = unknown, true = down, false = up
+    let isHomed = false;
+
+    function connect() {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${location.host}/ws`);
+
+      ws.onopen = () => {
+        document.getElementById('statusDot').classList.add('connected');
+        document.getElementById('statusText').textContent = 'Connected';
+      };
+
+      ws.onclose = () => {
+        document.getElementById('statusDot').classList.remove('connected');
+        document.getElementById('statusText').textContent = 'Disconnected';
+        setTimeout(connect, 3000);
+      };
+
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        handleMessage(msg);
+      };
+    }
+
+    function handleMessage(msg) {
+      if (msg.type === 'position:update') {
+        document.getElementById('posX').textContent = msg.data.x?.toFixed(1) ?? '--';
+        document.getElementById('posY').textContent = msg.data.y?.toFixed(1) ?? '--';
+      }
+      if (msg.type === 'job:started') {
+        document.getElementById('jobBanner').classList.add('active');
+        document.getElementById('jobName').textContent = msg.data.filename || 'Unknown';
+        location.href = 'job.html';
+      }
+    }
+
+    async function home() {
+      document.getElementById('homedStatus').textContent = '...';
+      const res = await fetch('/home', { method: 'POST' });
+      if (res.ok) {
+        isHomed = true;
+        updateHomedStatus();
+      }
+    }
+
+    async function penUp() {
+      await fetch('/gcode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: 'M42 P0 S0' })
+      });
+      penState = false;
+      updatePenStatus();
+    }
+
+    async function penDown() {
+      await fetch('/gcode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: 'M42 P0 S1' })
+      });
+      penState = true;
+      updatePenStatus();
+    }
+
+    async function estop() {
+      if (confirm('Emergency Stop?')) {
+        await fetch('/emergency-stop', { method: 'POST' });
+        isHomed = false;
+        updateHomedStatus();
+      }
+    }
+
+    function updatePenStatus() {
+      const el = document.getElementById('penStatus');
+      if (penState === null) {
+        el.textContent = '--';
+        el.className = 'value';
+      } else if (penState) {
+        el.textContent = 'Down';
+        el.className = 'value warning';
+      } else {
+        el.textContent = 'Up';
+        el.className = 'value ok';
+      }
+    }
+
+    function updateHomedStatus() {
+      const el = document.getElementById('homedStatus');
+      if (isHomed) {
+        el.textContent = 'Yes';
+        el.className = 'value ok';
+      } else {
+        el.textContent = 'No';
+        el.className = 'value warning';
+      }
+    }
+
+    // Check for active job on load
+    async function checkActiveJob() {
+      try {
+        const res = await fetch('/api/job/active');
+        const data = await res.json();
+        if (data.success && data.data) {
+          document.getElementById('jobBanner').classList.add('active');
+          document.getElementById('jobName').textContent = data.data.filename || 'Unknown';
+        }
+      } catch (e) {}
+    }
+
+    // Get initial status
+    async function getStatus() {
+      try {
+        const res = await fetch('/status');
+        const data = await res.json();
+        if (data.success && data.data) {
+          // Check homed status from Duet
+          if (data.data.homed !== undefined) {
+            isHomed = data.data.homed;
+            updateHomedStatus();
+          }
+        }
+      } catch (e) {}
+    }
+
+    // Get initial position
+    async function getPosition() {
+      try {
+        const res = await fetch('/position');
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('posX').textContent = data.data.x?.toFixed(1) ?? '--';
+          document.getElementById('posY').textContent = data.data.y?.toFixed(1) ?? '--';
+        }
+      } catch (e) {}
+    }
+
+    connect();
+    checkActiveJob();
+    getStatus();
+    getPosition();
+    updatePenStatus();
+  </script>
+</body>
+</html>

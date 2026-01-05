@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gellyroller - Files</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: monospace;
+      background: #111;
+      color: #eee;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      padding: 15px 20px;
+      border-bottom: 1px solid #333;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header h1 { font-size: 18px; }
+    header a {
+      color: #888;
+      text-decoration: none;
+      padding: 8px 16px;
+      background: #222;
+      border-radius: 4px;
+    }
+    header a:hover, header a:focus { background: #333; color: #eee; outline: 2px solid #0f0; }
+
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 1px;
+      background: #333;
+      min-height: 0;
+    }
+
+    .view-area {
+      background: #111;
+      display: flex;
+      flex-direction: column;
+    }
+    .preview-canvas {
+      flex: 2;
+      background: #0a0a0a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 0;
+    }
+    .preview-canvas canvas {
+      max-width: 100%;
+      max-height: 100%;
+      background: #000;
+    }
+    .metadata {
+      flex: 1;
+      padding: 15px;
+      background: #1a1a1a;
+      overflow-y: auto;
+    }
+    .metadata p { margin-bottom: 8px; font-size: 13px; }
+    .metadata label { color: #888; }
+
+    .details-area {
+      background: #111;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .file-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+    }
+    .file-item {
+      padding: 10px;
+      margin-bottom: 5px;
+      background: #222;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .file-item:hover, .file-item:focus { background: #333; outline: 2px solid #0f0; }
+    .file-item.selected { background: #030; border: 1px solid #0f0; }
+    .file-item .name { font-size: 14px; margin-bottom: 4px; }
+    .file-item .meta { font-size: 11px; color: #888; }
+
+    .file-actions {
+      padding: 15px;
+      border-top: 1px solid #333;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    button {
+      font-family: monospace;
+      font-size: 12px;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      background: #333;
+      color: #eee;
+    }
+    button:hover, button:focus { background: #444; outline: 2px solid #0f0; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.primary { background: #060; }
+    button.primary:hover, button.primary:focus { background: #080; }
+    button.danger { background: #600; }
+
+    /* Upload/drop zone */
+    .drop-zone {
+      flex: 2;
+      border: 2px dashed #444;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin: 15px;
+      cursor: pointer;
+    }
+    .drop-zone.dragover { border-color: #0f0; background: #020; }
+    .drop-zone p { margin-bottom: 15px; color: #888; }
+    .drop-zone input[type="file"] { display: none; }
+    .drop-zone label {
+      padding: 10px 20px;
+      background: #333;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .drop-zone label:hover { background: #444; }
+
+    .no-files { color: #666; padding: 20px; text-align: center; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Files</h1>
+    <a href="index.html">Back</a>
+  </header>
+
+  <main>
+    <div class="view-area">
+      <!-- Drop zone shown when no file selected -->
+      <div id="dropZone" class="drop-zone">
+        <p>Drop SVG or G-code file here</p>
+        <input type="file" id="fileInput" accept=".svg,.gcode,.g,.nc">
+        <label for="fileInput">Choose File</label>
+      </div>
+
+      <!-- Preview shown when file selected -->
+      <div id="previewSection" class="preview-canvas" style="display: none;">
+        <canvas id="previewCanvas" width="400" height="400"></canvas>
+      </div>
+      <div id="metadataSection" class="metadata" style="display: none;">
+        <p><label>File:</label> <span id="metaName">--</span></p>
+        <p><label>Type:</label> <span id="metaType">--</span></p>
+        <p><label>Size:</label> <span id="metaSize">--</span></p>
+        <p><label>Paths:</label> <span id="metaPaths">--</span></p>
+        <p><label>Est. Time:</label> <span id="metaTime">--</span></p>
+      </div>
+    </div>
+
+    <div class="details-area">
+      <div class="file-list" id="fileList">
+        <div class="no-files">Loading...</div>
+      </div>
+      <div class="file-actions">
+        <button id="btnPreview" onclick="goToPreview()" disabled>Preview</button>
+        <button id="btnDelete" class="danger" onclick="deleteFile()" disabled>Delete</button>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let files = [];
+    let selectedFileId = null;
+
+    // File list
+    async function loadFiles() {
+      try {
+        const res = await fetch('/api/files');
+        const data = await res.json();
+        if (data.success) {
+          files = data.data;
+          renderFileList();
+        }
+      } catch (e) {
+        document.getElementById('fileList').innerHTML = '<div class="no-files">Error loading files</div>';
+      }
+    }
+
+    function renderFileList() {
+      const list = document.getElementById('fileList');
+      if (files.length === 0) {
+        list.innerHTML = '<div class="no-files">No files</div>';
+        return;
+      }
+      list.innerHTML = files.map(f => `
+        <div class="file-item ${f.id === selectedFileId ? 'selected' : ''}"
+             onclick="selectFile(${f.id})" tabindex="0">
+          <div class="name">${f.filename}</div>
+          <div class="meta">${f.type} - ${formatSize(f.size)}</div>
+        </div>
+      `).join('');
+    }
+
+    function selectFile(id) {
+      selectedFileId = id;
+      renderFileList();
+      loadPreview(id);
+      document.getElementById('btnPreview').disabled = false;
+      document.getElementById('btnDelete').disabled = false;
+    }
+
+    async function loadPreview(id) {
+      try {
+        const res = await fetch(`/api/files/${id}`);
+        const data = await res.json();
+        if (data.success) {
+          showPreview(data.data);
+        }
+      } catch (e) {}
+    }
+
+    function showPreview(file) {
+      document.getElementById('dropZone').style.display = 'none';
+      document.getElementById('previewSection').style.display = 'flex';
+      document.getElementById('metadataSection').style.display = 'block';
+
+      document.getElementById('metaName').textContent = file.filename;
+      document.getElementById('metaType').textContent = file.type;
+      document.getElementById('metaSize').textContent = formatSize(file.size);
+      document.getElementById('metaPaths').textContent = file.stats?.pathCount ?? '--';
+      document.getElementById('metaTime').textContent = formatTime(file.stats?.estimatedTimeMs);
+
+      // Draw preview on canvas
+      if (file.preview) {
+        drawPreview(file.preview);
+      }
+    }
+
+    function drawPreview(paths) {
+      const canvas = document.getElementById('previewCanvas');
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      if (!paths || paths.length === 0) return;
+
+      const scale = canvas.width / 480;
+      ctx.strokeStyle = '#0f0';
+      ctx.lineWidth = 1;
+
+      for (const path of paths) {
+        if (path.points && path.points.length > 1) {
+          ctx.beginPath();
+          ctx.moveTo(path.points[0].x * scale, canvas.height - path.points[0].y * scale);
+          for (let i = 1; i < path.points.length; i++) {
+            ctx.lineTo(path.points[i].x * scale, canvas.height - path.points[i].y * scale);
+          }
+          ctx.stroke();
+        }
+      }
+    }
+
+    function goToPreview() {
+      if (selectedFileId) {
+        localStorage.setItem('selectedFileId', selectedFileId);
+        location.href = 'preview.html';
+      }
+    }
+
+    async function deleteFile() {
+      if (!selectedFileId) return;
+      if (!confirm('Delete this file?')) return;
+
+      try {
+        await fetch(`/api/files/${selectedFileId}`, { method: 'DELETE' });
+        selectedFileId = null;
+        loadFiles();
+        document.getElementById('dropZone').style.display = 'flex';
+        document.getElementById('previewSection').style.display = 'none';
+        document.getElementById('metadataSection').style.display = 'none';
+        document.getElementById('btnPreview').disabled = true;
+        document.getElementById('btnDelete').disabled = true;
+      } catch (e) {}
+    }
+
+    // Drag and drop
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('dragover');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file) uploadFile(file);
+    });
+
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files[0];
+      if (file) uploadFile(file);
+    });
+
+    async function uploadFile(file) {
+      const ext = file.name.split('.').pop().toLowerCase();
+      const validExts = ['svg', 'gcode', 'g', 'nc'];
+
+      if (!validExts.includes(ext)) {
+        alert('Only SVG and G-code files are supported');
+        return;
+      }
+
+      const content = await file.text();
+      try {
+        const res = await fetch('/api/files', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: file.name, content })
+        });
+        const data = await res.json();
+        if (data.success) {
+          loadFiles();
+          selectFile(data.data.id);
+        } else {
+          alert(data.error || 'Upload failed');
+        }
+      } catch (e) {
+        alert('Upload failed');
+      }
+    }
+
+    // Helpers
+    function formatSize(bytes) {
+      if (!bytes) return '--';
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+    }
+
+    function formatTime(ms) {
+      if (!ms) return '--';
+      const s = Math.floor(ms / 1000);
+      const m = Math.floor(s / 60);
+      return `${m}:${(s % 60).toString().padStart(2, '0')}`;
+    }
+
+    // Init
+    loadFiles();
+  </script>
+</body>
+</html>

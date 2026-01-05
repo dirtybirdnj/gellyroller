@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gellyroller - Preview</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: monospace;
+      background: #111;
+      color: #eee;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      padding: 15px 20px;
+      border-bottom: 1px solid #333;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header h1 { font-size: 18px; }
+    header .actions { display: flex; gap: 10px; }
+    header a, header button {
+      font-family: monospace;
+      font-size: 12px;
+      color: #eee;
+      text-decoration: none;
+      padding: 8px 16px;
+      background: #222;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    header a:hover, header a:focus,
+    header button:hover, header button:focus { background: #333; outline: 2px solid #0f0; }
+    header button.primary { background: #060; }
+    header button.primary:hover { background: #080; }
+
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 1px;
+      background: #333;
+      min-height: 0;
+    }
+
+    .preview-area {
+      background: #111;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .canvas-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+      min-height: 0;
+      padding: 20px;
+    }
+    #previewSvg {
+      max-width: 100%;
+      max-height: 100%;
+      background: #0a0a0a;
+    }
+    #previewSvg path {
+      fill: none;
+      stroke: #0f0;
+      stroke-width: 1;
+    }
+    #previewSvg path.travel {
+      stroke: #333;
+      stroke-dasharray: 4 4;
+    }
+
+    .playback-controls {
+      padding: 15px;
+      background: #1a1a1a;
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+    .playback-controls button {
+      font-family: monospace;
+      font-size: 14px;
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      background: #333;
+      color: #eee;
+    }
+    .playback-controls button:hover { background: #444; }
+    .playback-controls button.active { background: #060; }
+    .scrubber {
+      flex: 1;
+      height: 8px;
+      background: #333;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .scrubber-fill {
+      height: 100%;
+      background: #0f0;
+      border-radius: 4px;
+      width: 0%;
+    }
+    .time-display {
+      font-size: 12px;
+      color: #888;
+      min-width: 80px;
+    }
+
+    .settings-area {
+      background: #111;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow-y: auto;
+    }
+    .settings-section {
+      padding: 15px;
+      border-bottom: 1px solid #333;
+    }
+    .settings-section h2 {
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 10px;
+    }
+    .setting-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .setting-row label { font-size: 13px; }
+    .setting-row input, .setting-row select {
+      font-family: monospace;
+      font-size: 13px;
+      padding: 6px 10px;
+      background: #222;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #eee;
+      width: 100px;
+    }
+    .setting-row select { width: 120px; }
+    .setting-row input:focus, .setting-row select:focus {
+      outline: none;
+      border-color: #0f0;
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+    .info-row label { color: #888; }
+    .info-row .value { color: #0f0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Preview</h1>
+    <div class="actions">
+      <a href="files.html">Back</a>
+      <button class="primary" onclick="runJob()">Run Job</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="preview-area">
+      <div class="canvas-container">
+        <svg id="previewSvg" viewBox="0 0 480 480" width="480" height="480"></svg>
+      </div>
+      <div class="playback-controls">
+        <button id="btnPlay" onclick="togglePlay()">Play</button>
+        <button onclick="setSpeed(1)" class="active" data-speed="1">1x</button>
+        <button onclick="setSpeed(2)" data-speed="2">2x</button>
+        <button onclick="setSpeed(5)" data-speed="5">5x</button>
+        <button onclick="setSpeed(10)" data-speed="10">10x</button>
+        <div class="scrubber" onclick="scrub(event)">
+          <div class="scrubber-fill" id="scrubberFill"></div>
+        </div>
+        <div class="time-display">
+          <span id="currentTime">0:00</span> / <span id="totalTime">0:00</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-area">
+      <div class="settings-section">
+        <h2>Info</h2>
+        <div class="info-row">
+          <label>File:</label>
+          <span class="value" id="infoFilename">--</span>
+        </div>
+        <div class="info-row">
+          <label>Paths:</label>
+          <span class="value" id="infoPaths">--</span>
+        </div>
+        <div class="info-row">
+          <label>Draw Distance:</label>
+          <span class="value" id="infoDrawDist">--</span>
+        </div>
+        <div class="info-row">
+          <label>Travel Distance:</label>
+          <span class="value" id="infoTravelDist">--</span>
+        </div>
+        <div class="info-row">
+          <label>Est. Time:</label>
+          <span class="value" id="infoTime">--</span>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h2>Speed</h2>
+        <div class="setting-row">
+          <label>Draw Speed</label>
+          <input type="number" id="drawSpeed" value="3000" min="500" max="18000" step="500">
+        </div>
+        <div class="setting-row">
+          <label>Travel Speed</label>
+          <input type="number" id="travelSpeed" value="6000" min="1000" max="18000" step="500">
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h2>Pen Timing</h2>
+        <div class="setting-row">
+          <label>Pen Down Delay</label>
+          <input type="number" id="penDownDelay" value="150" min="0" max="1000" step="25">
+        </div>
+        <div class="setting-row">
+          <label>Pen Up Delay</label>
+          <input type="number" id="penUpDelay" value="100" min="0" max="1000" step="25">
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h2>Layout</h2>
+        <div class="setting-row">
+          <label>Scale</label>
+          <select id="scaleMode">
+            <option value="contain">Contain</option>
+            <option value="fit">Fit</option>
+            <option value="none">None (1:1)</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <label>Horizontal</label>
+          <select id="alignX">
+            <option value="left">Left</option>
+            <option value="center" selected>Center</option>
+            <option value="right">Right</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <label>Vertical</label>
+          <select id="alignY">
+            <option value="front">Front</option>
+            <option value="center" selected>Center</option>
+            <option value="back">Back</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <button onclick="saveSettings()" style="width:100%;padding:12px;background:#060;border:none;border-radius:4px;color:#eee;font-family:monospace;cursor:pointer;">Save Settings</button>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let fileId = null;
+    let fileData = null;
+    let paths = [];
+    let totalDuration = 0;
+    let isPlaying = false;
+    let playbackSpeed = 1;
+    let animationStart = 0;
+    let animationProgress = 0;
+    let animationFrame = null;
+
+    async function loadFile() {
+      fileId = localStorage.getItem('selectedFileId');
+      if (!fileId) {
+        location.href = 'files.html';
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/files/${fileId}`);
+        const data = await res.json();
+        if (data.success) {
+          fileData = data.data;
+          applySettings(fileData.settings);
+          renderPreview();
+          updateInfo();
+        }
+      } catch (e) {
+        alert('Failed to load file');
+        location.href = 'files.html';
+      }
+    }
+
+    function applySettings(settings) {
+      if (!settings) return;
+      if (settings.drawSpeed) document.getElementById('drawSpeed').value = settings.drawSpeed;
+      if (settings.travelSpeed) document.getElementById('travelSpeed').value = settings.travelSpeed;
+      if (settings.penDownDelay) document.getElementById('penDownDelay').value = settings.penDownDelay;
+      if (settings.penUpDelay) document.getElementById('penUpDelay').value = settings.penUpDelay;
+      if (settings.scaleMode) document.getElementById('scaleMode').value = settings.scaleMode;
+      if (settings.alignX) document.getElementById('alignX').value = settings.alignX;
+      if (settings.alignY) document.getElementById('alignY').value = settings.alignY;
+    }
+
+    function renderPreview() {
+      if (!fileData || !fileData.preview) return;
+
+      const svg = document.getElementById('previewSvg');
+      svg.innerHTML = '';
+      paths = [];
+      totalDuration = 0;
+
+      const drawSpeed = parseInt(document.getElementById('drawSpeed').value);
+      const travelSpeed = parseInt(document.getElementById('travelSpeed').value);
+
+      let lastX = 0, lastY = 0;
+
+      for (const pathData of fileData.preview) {
+        if (!pathData.points || pathData.points.length < 2) continue;
+
+        // Travel move to start
+        const startX = pathData.points[0].x;
+        const startY = 480 - pathData.points[0].y;
+        const travelDist = Math.sqrt(Math.pow(startX - lastX, 2) + Math.pow(startY - lastY, 2));
+        const travelTime = (travelDist / travelSpeed) * 60 * 1000;
+
+        if (travelDist > 0.1) {
+          const travelPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          travelPath.setAttribute('d', `M${lastX},${lastY} L${startX},${startY}`);
+          travelPath.setAttribute('class', 'travel');
+          travelPath.style.strokeDasharray = travelPath.getTotalLength();
+          travelPath.style.strokeDashoffset = travelPath.getTotalLength();
+          svg.appendChild(travelPath);
+          paths.push({ element: travelPath, duration: travelTime, start: totalDuration });
+          totalDuration += travelTime;
+        }
+
+        // Draw path
+        let d = `M${startX},${startY}`;
+        let drawDist = 0;
+        for (let i = 1; i < pathData.points.length; i++) {
+          const x = pathData.points[i].x;
+          const y = 480 - pathData.points[i].y;
+          const px = pathData.points[i-1].x;
+          const py = 480 - pathData.points[i-1].y;
+          drawDist += Math.sqrt(Math.pow(x - px, 2) + Math.pow(y - py, 2));
+          d += ` L${x},${y}`;
+        }
+        const drawTime = (drawDist / drawSpeed) * 60 * 1000;
+
+        const drawPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        drawPath.setAttribute('d', d);
+        drawPath.style.strokeDasharray = drawPath.getTotalLength();
+        drawPath.style.strokeDashoffset = drawPath.getTotalLength();
+        svg.appendChild(drawPath);
+        paths.push({ element: drawPath, duration: drawTime, start: totalDuration });
+        totalDuration += drawTime;
+
+        lastX = pathData.points[pathData.points.length - 1].x;
+        lastY = 480 - pathData.points[pathData.points.length - 1].y;
+      }
+
+      document.getElementById('totalTime').textContent = formatTime(totalDuration);
+    }
+
+    function updateInfo() {
+      if (!fileData) return;
+      document.getElementById('infoFilename').textContent = fileData.filename;
+      document.getElementById('infoPaths').textContent = fileData.stats?.pathCount ?? '--';
+      document.getElementById('infoDrawDist').textContent = (fileData.stats?.drawDistanceMm ?? '--') + ' mm';
+      document.getElementById('infoTravelDist').textContent = (fileData.stats?.travelDistanceMm ?? '--') + ' mm';
+      document.getElementById('infoTime').textContent = formatTime(fileData.stats?.estimatedTimeMs);
+    }
+
+    function togglePlay() {
+      if (isPlaying) {
+        pause();
+      } else {
+        play();
+      }
+    }
+
+    function play() {
+      isPlaying = true;
+      document.getElementById('btnPlay').textContent = 'Pause';
+      animationStart = performance.now() - (animationProgress * totalDuration / playbackSpeed);
+      animate();
+    }
+
+    function pause() {
+      isPlaying = false;
+      document.getElementById('btnPlay').textContent = 'Play';
+      if (animationFrame) cancelAnimationFrame(animationFrame);
+    }
+
+    function animate() {
+      if (!isPlaying) return;
+
+      const elapsed = (performance.now() - animationStart) * playbackSpeed;
+      animationProgress = Math.min(elapsed / totalDuration, 1);
+
+      updateAnimation(animationProgress);
+
+      document.getElementById('scrubberFill').style.width = (animationProgress * 100) + '%';
+      document.getElementById('currentTime').textContent = formatTime(animationProgress * totalDuration);
+
+      if (animationProgress < 1) {
+        animationFrame = requestAnimationFrame(animate);
+      } else {
+        pause();
+        animationProgress = 0;
+      }
+    }
+
+    function updateAnimation(progress) {
+      const currentTime = progress * totalDuration;
+
+      for (const path of paths) {
+        const pathEnd = path.start + path.duration;
+        const len = path.element.getTotalLength();
+
+        if (currentTime < path.start) {
+          path.element.style.strokeDashoffset = len;
+        } else if (currentTime > pathEnd) {
+          path.element.style.strokeDashoffset = 0;
+        } else {
+          const pathProgress = (currentTime - path.start) / path.duration;
+          path.element.style.strokeDashoffset = len * (1 - pathProgress);
+        }
+      }
+    }
+
+    function setSpeed(speed) {
+      playbackSpeed = speed;
+      document.querySelectorAll('[data-speed]').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.dataset.speed) === speed);
+      });
+      if (isPlaying) {
+        animationStart = performance.now() - (animationProgress * totalDuration / playbackSpeed);
+      }
+    }
+
+    function scrub(event) {
+      const rect = event.target.getBoundingClientRect();
+      const progress = (event.clientX - rect.left) / rect.width;
+      animationProgress = Math.max(0, Math.min(1, progress));
+      updateAnimation(animationProgress);
+      document.getElementById('scrubberFill').style.width = (animationProgress * 100) + '%';
+      document.getElementById('currentTime').textContent = formatTime(animationProgress * totalDuration);
+      if (isPlaying) {
+        animationStart = performance.now() - (animationProgress * totalDuration / playbackSpeed);
+      }
+    }
+
+    async function saveSettings() {
+      const settings = {
+        drawSpeed: parseInt(document.getElementById('drawSpeed').value),
+        travelSpeed: parseInt(document.getElementById('travelSpeed').value),
+        penDownDelay: parseInt(document.getElementById('penDownDelay').value),
+        penUpDelay: parseInt(document.getElementById('penUpDelay').value),
+        scaleMode: document.getElementById('scaleMode').value,
+        alignX: document.getElementById('alignX').value,
+        alignY: document.getElementById('alignY').value
+      };
+
+      try {
+        const res = await fetch(`/api/files/${fileId}/settings`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(settings)
+        });
+        const data = await res.json();
+        if (data.success) {
+          fileData = data.data;
+          renderPreview();
+          updateInfo();
+        }
+      } catch (e) {
+        alert('Failed to save settings');
+      }
+    }
+
+    async function runJob() {
+      try {
+        const res = await fetch(`/api/files/${fileId}/run`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          localStorage.setItem('currentJobId', data.data.jobId);
+          location.href = 'job.html';
+        } else {
+          alert(data.error || 'Failed to start job');
+        }
+      } catch (e) {
+        alert('Failed to start job');
+      }
+    }
+
+    function formatTime(ms) {
+      if (!ms) return '0:00';
+      const s = Math.floor(ms / 1000);
+      const m = Math.floor(s / 60);
+      return `${m}:${(s % 60).toString().padStart(2, '0')}`;
+    }
+
+    loadFile();
+  </script>
+</body>
+</html>

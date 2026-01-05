@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gellyroller - Job</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: monospace;
+      background: #111;
+      color: #eee;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      padding: 15px 20px;
+      border-bottom: 1px solid #333;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header h1 { font-size: 18px; }
+    header .status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    header .status-badge {
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      background: #060;
+    }
+    header .status-badge.paused { background: #660; }
+    header .status-badge.completed { background: #333; }
+    header .status-badge.error { background: #600; }
+    header a {
+      color: #888;
+      text-decoration: none;
+      padding: 8px 16px;
+      background: #222;
+      border-radius: 4px;
+      display: none;
+    }
+    header a.visible { display: inline-block; }
+    header a:hover, header a:focus { background: #333; color: #eee; }
+
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: #333;
+      min-height: 0;
+    }
+
+    .info-area {
+      background: #111;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+    }
+
+    .job-info {
+      margin-bottom: 20px;
+    }
+    .job-info .filename {
+      font-size: 16px;
+      margin-bottom: 10px;
+      color: #0f0;
+    }
+    .progress-bar {
+      height: 20px;
+      background: #222;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 10px;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #0a0, #0f0);
+      transition: width 0.3s;
+    }
+    .progress-text {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #888;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .stat-box {
+      background: #1a1a1a;
+      padding: 12px;
+      border-radius: 4px;
+    }
+    .stat-box label {
+      font-size: 10px;
+      color: #888;
+      display: block;
+      margin-bottom: 4px;
+    }
+    .stat-box .value {
+      font-size: 18px;
+      color: #0f0;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-top: auto;
+    }
+    button {
+      font-family: monospace;
+      font-size: 14px;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      background: #333;
+      color: #eee;
+    }
+    button:hover, button:focus { background: #444; outline: 2px solid #0f0; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.primary { background: #060; }
+    button.primary:hover { background: #080; }
+    button.warning { background: #660; }
+    button.warning:hover { background: #880; }
+    button.danger { background: #600; }
+    button.danger:hover { background: #800; }
+
+    .gcode-area {
+      background: #111;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .gcode-header {
+      padding: 10px 15px;
+      border-bottom: 1px solid #333;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .gcode-header h2 { font-size: 14px; color: #888; }
+    .gcode-toggle {
+      display: flex;
+      gap: 5px;
+    }
+    .gcode-toggle button {
+      padding: 4px 10px;
+      font-size: 11px;
+      background: #222;
+    }
+    .gcode-toggle button.active { background: #060; }
+
+    .gcode-log {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 15px;
+      font-size: 12px;
+      line-height: 1.6;
+      background: #0a0a0a;
+    }
+    .gcode-line {
+      display: flex;
+      padding: 2px 0;
+    }
+    .gcode-line.executed { color: #666; }
+    .gcode-line.current { color: #ff0; background: #220; }
+    .gcode-line.upcoming { color: #888; }
+    .gcode-line .line-num {
+      width: 50px;
+      color: #444;
+      text-align: right;
+      margin-right: 10px;
+      flex-shrink: 0;
+    }
+    .gcode-line.current .line-num { color: #880; }
+
+    /* Context mode - center current line */
+    .gcode-log.context-mode {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .gcode-log.context-mode .gcode-line {
+      opacity: 0.3;
+    }
+    .gcode-log.context-mode .gcode-line.current {
+      opacity: 1;
+      font-size: 14px;
+    }
+    .gcode-log.context-mode .gcode-line.near {
+      opacity: 0.6;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Job</h1>
+    <div class="status">
+      <span id="statusBadge" class="status-badge">Running</span>
+      <a href="index.html" id="backLink">Back</a>
+    </div>
+  </header>
+
+  <main>
+    <div class="info-area">
+      <div class="job-info">
+        <div class="filename" id="filename">Loading...</div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+        </div>
+        <div class="progress-text">
+          <span>Line <span id="currentLine">0</span> / <span id="totalLines">0</span></span>
+          <span id="percentage">0%</span>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-box">
+          <label>Position X</label>
+          <div class="value" id="posX">--</div>
+        </div>
+        <div class="stat-box">
+          <label>Position Y</label>
+          <div class="value" id="posY">--</div>
+        </div>
+        <div class="stat-box">
+          <label>Elapsed</label>
+          <div class="value" id="elapsed">0:00</div>
+        </div>
+        <div class="stat-box">
+          <label>Remaining</label>
+          <div class="value" id="remaining">--</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button id="btnPause" class="warning" onclick="pauseJob()">Pause</button>
+        <button id="btnResume" class="primary" onclick="resumeJob()" style="display:none">Resume</button>
+        <button id="btnCancel" onclick="cancelJob()">Cancel</button>
+        <button class="danger" onclick="estop()">E-Stop</button>
+      </div>
+    </div>
+
+    <div class="gcode-area">
+      <div class="gcode-header">
+        <h2>G-code</h2>
+        <div class="gcode-toggle">
+          <button class="active" onclick="setViewMode('log')" data-mode="log">Log</button>
+          <button onclick="setViewMode('context')" data-mode="context">Context</button>
+        </div>
+      </div>
+      <div class="gcode-log" id="gcodeLog">
+        <div class="gcode-line"><span class="line-num"></span>Waiting for job data...</div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let ws;
+    let jobId = null;
+    let gcodeLines = [];
+    let currentLineIndex = 0;
+    let jobState = 'running';
+    let viewMode = 'log';
+
+    function connect() {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${location.host}/ws`);
+
+      ws.onopen = () => {
+        if (jobId) {
+          ws.send(JSON.stringify({ type: 'subscribe', data: { jobId } }));
+        }
+      };
+
+      ws.onclose = () => {
+        setTimeout(connect, 3000);
+      };
+
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        handleMessage(msg);
+      };
+    }
+
+    function handleMessage(msg) {
+      switch (msg.type) {
+        case 'position:update':
+          document.getElementById('posX').textContent = msg.data.x?.toFixed(1) ?? '--';
+          document.getElementById('posY').textContent = msg.data.y?.toFixed(1) ?? '--';
+          break;
+
+        case 'job:gcode':
+          gcodeLines = msg.data.lines;
+          renderGcode();
+          break;
+
+        case 'job:progress':
+          currentLineIndex = msg.data.currentLine;
+          document.getElementById('currentLine').textContent = msg.data.currentLine;
+          document.getElementById('totalLines').textContent = msg.data.totalLines;
+          document.getElementById('percentage').textContent = msg.data.percentage + '%';
+          document.getElementById('progressFill').style.width = msg.data.percentage + '%';
+          document.getElementById('elapsed').textContent = formatTime(msg.data.elapsedMs);
+          document.getElementById('remaining').textContent = formatTime(msg.data.estimatedRemainingMs);
+          renderGcode();
+          break;
+
+        case 'job:paused':
+          setJobState('paused');
+          break;
+
+        case 'job:resumed':
+          setJobState('running');
+          break;
+
+        case 'job:completed':
+          setJobState('completed');
+          break;
+
+        case 'job:error':
+          setJobState('error');
+          alert('Job error: ' + msg.data.error);
+          break;
+
+        case 'job:cancelled':
+          setJobState('completed');
+          break;
+      }
+    }
+
+    function setJobState(state) {
+      jobState = state;
+      const badge = document.getElementById('statusBadge');
+      const backLink = document.getElementById('backLink');
+      const btnPause = document.getElementById('btnPause');
+      const btnResume = document.getElementById('btnResume');
+      const btnCancel = document.getElementById('btnCancel');
+
+      badge.className = 'status-badge ' + state;
+      badge.textContent = state.charAt(0).toUpperCase() + state.slice(1);
+
+      if (state === 'running') {
+        backLink.classList.remove('visible');
+        btnPause.style.display = 'inline-block';
+        btnResume.style.display = 'none';
+        btnCancel.disabled = false;
+      } else if (state === 'paused') {
+        backLink.classList.remove('visible');
+        btnPause.style.display = 'none';
+        btnResume.style.display = 'inline-block';
+        btnCancel.disabled = false;
+      } else {
+        backLink.classList.add('visible');
+        btnPause.style.display = 'none';
+        btnResume.style.display = 'none';
+        btnCancel.disabled = true;
+      }
+    }
+
+    function renderGcode() {
+      const log = document.getElementById('gcodeLog');
+
+      if (viewMode === 'log') {
+        log.classList.remove('context-mode');
+        log.innerHTML = gcodeLines.map((line, i) => {
+          let cls = 'gcode-line';
+          if (i < currentLineIndex) cls += ' executed';
+          else if (i === currentLineIndex) cls += ' current';
+          else cls += ' upcoming';
+          return `<div class="${cls}"><span class="line-num">${i + 1}</span>${escapeHtml(line)}</div>`;
+        }).join('');
+
+        // Scroll to current line
+        const currentEl = log.querySelector('.current');
+        if (currentEl) {
+          currentEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
+      } else {
+        // Context mode - show 5 before, current, 5 after
+        log.classList.add('context-mode');
+        const start = Math.max(0, currentLineIndex - 5);
+        const end = Math.min(gcodeLines.length, currentLineIndex + 6);
+        log.innerHTML = gcodeLines.slice(start, end).map((line, i) => {
+          const actualIndex = start + i;
+          let cls = 'gcode-line';
+          if (actualIndex < currentLineIndex) cls += ' executed';
+          else if (actualIndex === currentLineIndex) cls += ' current';
+          else cls += ' upcoming';
+          if (Math.abs(actualIndex - currentLineIndex) <= 2) cls += ' near';
+          return `<div class="${cls}"><span class="line-num">${actualIndex + 1}</span>${escapeHtml(line)}</div>`;
+        }).join('');
+      }
+    }
+
+    function setViewMode(mode) {
+      viewMode = mode;
+      document.querySelectorAll('[data-mode]').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mode === mode);
+      });
+      renderGcode();
+    }
+
+    async function pauseJob() {
+      if (jobId) {
+        await fetch(`/job/${jobId}/pause`, { method: 'POST' });
+      }
+    }
+
+    async function resumeJob() {
+      if (jobId) {
+        await fetch(`/job/${jobId}/resume`, { method: 'POST' });
+      }
+    }
+
+    async function cancelJob() {
+      if (jobId && confirm('Cancel this job?')) {
+        await fetch(`/job/${jobId}/cancel`, { method: 'POST' });
+      }
+    }
+
+    async function estop() {
+      if (confirm('Emergency Stop?')) {
+        await fetch('/emergency-stop', { method: 'POST' });
+      }
+    }
+
+    async function loadJob() {
+      jobId = localStorage.getItem('currentJobId');
+
+      // Check for active job
+      try {
+        const res = await fetch('/job/active');
+        const data = await res.json();
+        if (data.success && data.data) {
+          jobId = data.data.id;
+          localStorage.setItem('currentJobId', jobId);
+          document.getElementById('filename').textContent = data.data.filename;
+          if (data.data.gcode) {
+            gcodeLines = data.data.gcode.split('\n');
+            renderGcode();
+          }
+          setJobState(data.data.state || 'running');
+        } else if (!jobId) {
+          location.href = 'index.html';
+        }
+      } catch (e) {
+        if (!jobId) {
+          location.href = 'index.html';
+        }
+      }
+    }
+
+    function formatTime(ms) {
+      if (!ms || ms < 0) return '--';
+      const s = Math.floor(ms / 1000);
+      const m = Math.floor(s / 60);
+      return `${m}:${(s % 60).toString().padStart(2, '0')}`;
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // Keyboard shortcut for view toggle
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        setViewMode(viewMode === 'log' ? 'context' : 'log');
+      }
+    });
+
+    loadJob();
+    connect();
+  </script>
+</body>
+</html>
